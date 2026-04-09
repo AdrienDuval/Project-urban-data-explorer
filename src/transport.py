@@ -25,7 +25,7 @@ from src.config import (
 # -------------------------------------------------------------------------
 def _read_csv_auto(path) -> pd.DataFrame:
     """Lecture CSV avec détection automatique du séparateur."""
-    return pd.read_csv(path, sep=None, engine="python")
+    return pd.read_csv(path, sep=";")
 
 
 def _split_geopoint(series: pd.Series) -> pd.DataFrame:
