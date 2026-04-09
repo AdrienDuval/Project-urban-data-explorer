@@ -29,11 +29,17 @@ BDCOM_OD_RAW     = BRONZE / "public_service_data" / "BDCOM_2023_OD.xlsx"
 # Hospitals
 HOSPITALS_RAW    = BRONZE / "public_service_data" / "les_etablissements_hospitaliers_franciliens.csv"
 
+#indicator 2
+TRANSPORT_ARRETS_RAW = BRONZE / "transport_data" / "arrets.csv"
+TRANSPORT_VELIB_RAW  = BRONZE / "transport_data" / "velib.csv"
+
+
 # ── Silver outputs ─────────────────────────────────────────────────────────────
 IRIS_GEOJSON      = BRONZE / "main_data" / "iris.geojson"
 IRIS_SILVER       = SILVER / "iris_paris.csv"
 POPULATION_SILVER = SILVER / "population_paris.csv"
 SCHOOLS_SILVER    = SILVER / "schools_merged.csv"
+
 DVF_SILVER        = SILVER / "dvf_paris_clean.csv"
 BDCOM_SILVER      = SILVER / "bdcom_paris_clean.csv"
 HOSPITALS_SILVER  = SILVER / "hospitals_paris_clean.csv"
@@ -45,8 +51,14 @@ DVF_SURFACE_MAX   = 1000   # m²
 DVF_PRIX_M2_MIN   = 1_000  # €/m²
 DVF_PRIX_M2_MAX   = 50_000 # €/m²
 
+TRANSPORT_ARRETS_SILVER = SILVER / "transport_arrets_paris.csv"
+TRANSPORT_VELIB_SILVER  = SILVER / "velib_paris.csv"
+
+
 # ── Gold outputs ───────────────────────────────────────────────────────────────
 SCHOOL_DENSITY_GOLD = GOLD / "schools_score_iris.csv"
+
+TRANSPORT_SCORE_GOLD = GOLD / "transport_score_iris.csv"
 
 # ── Pipeline settings ──────────────────────────────────────────────────────────
 # Radius (metres) around each IRIS centroid used to count nearby schools
@@ -64,3 +76,13 @@ SCHOOL_TYPES = [
     "Elémentaire",
     "Polyvalent",
 ]
+
+# ── Transport weights ────────────────────────────────────────────────────────
+TRANSPORT_WEIGHTS = {
+    "metro": 1.0,
+    "rail": 1.2,
+    "tram": 0.7,
+    "bus": 0.4,
+    "cableway": 0.5,
+    "velib": 0.3,
+}
