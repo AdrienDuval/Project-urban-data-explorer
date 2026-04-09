@@ -14,19 +14,36 @@ SILVER = DATA_DIR / "silver"
 GOLD   = DATA_DIR / "gold"
 
 # ── Bronze inputs ──────────────────────────────────────────────────────────────
-#Main data
+# Main data
 IRIS_RAW         = BRONZE / "main_data" / "iris.xlsx"
-POPULATION_RAW   = BRONZE / "main_data" / "base-ic-evol-struct-pop-2019.xlsx"
-#Indicator 1
+POPULATION_RAW   = BRONZE / "main_data" / "base-ic-evol-struct-pop-2022.CSV"
+# Indicator 1 — school accessibility
 COLLEGES_RAW     = BRONZE / "indice_vivabilite_familiale" / "etablissements-scolaires-colleges.xlsx"
 ELEMENTAIRES_RAW = BRONZE / "indice_vivabilite_familiale" / "etablissements-scolaires-ecoles-elementaires.xlsx"
 MATERNELLES_RAW  = BRONZE / "indice_vivabilite_familiale" / "etablissements-scolaires-maternelles.xlsx"
+# DVF — housing transactions
+DVF_RAW          = BRONZE / "public_service_data" / "ValeursFoncieres-2025.txt"
+# BDCOM — public service establishments
+BDCOM_RAW        = BRONZE / "public_service_data" / "BDCOM_2023.csv"
+BDCOM_OD_RAW     = BRONZE / "public_service_data" / "BDCOM_2023_OD.xlsx"
+# Hospitals
+HOSPITALS_RAW    = BRONZE / "public_service_data" / "les_etablissements_hospitaliers_franciliens.csv"
 
 # ── Silver outputs ─────────────────────────────────────────────────────────────
-IRIS_GEOJSON      = SILVER / "iris.geojson"        # pre-existing full IDF GeoJSON
-IRIS_SILVER       = SILVER / "iris_paris.xlsx"
+IRIS_GEOJSON      = BRONZE / "main_data" / "iris.geojson"
+IRIS_SILVER       = SILVER / "iris_paris.csv"
 POPULATION_SILVER = SILVER / "population_paris.csv"
 SCHOOLS_SILVER    = SILVER / "schools_merged.csv"
+DVF_SILVER        = SILVER / "dvf_paris_clean.csv"
+BDCOM_SILVER      = SILVER / "bdcom_paris_clean.csv"
+HOSPITALS_SILVER  = SILVER / "hospitals_paris_clean.csv"
+
+# ── DVF filter settings ────────────────────────────────────────────────────────
+DVF_TYPES_TO_KEEP = ["Appartement", "Maison"]
+DVF_SURFACE_MIN   = 5      # m²
+DVF_SURFACE_MAX   = 1000   # m²
+DVF_PRIX_M2_MIN   = 1_000  # €/m²
+DVF_PRIX_M2_MAX   = 50_000 # €/m²
 
 # ── Gold outputs ───────────────────────────────────────────────────────────────
 SCHOOL_DENSITY_GOLD = GOLD / "schools_score_iris.csv"

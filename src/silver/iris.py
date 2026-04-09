@@ -18,6 +18,6 @@ def process_iris() -> pd.DataFrame:
     iris = pd.read_excel(IRIS_RAW)
     iris_paris = iris[iris["DEP"] == 75].copy()
 
-    iris_paris.to_excel(IRIS_SILVER, index=False)
+    iris_paris.to_csv(IRIS_SILVER, index=False)
     print(f"[iris] {len(iris_paris)} IRIS zones saved → {IRIS_SILVER.name}")
     return iris_paris

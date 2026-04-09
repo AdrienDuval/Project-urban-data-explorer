@@ -1,6 +1,6 @@
 """Pydantic models for population data responses.
 
-Population figures come from the INSEE 2019 census (silver layer,
+Population figures come from the INSEE 2022 census (silver layer,
 ``population_paris.csv``).  Only residential IRIS zones (TYP_IRIS='H') with
 more than 500 inhabitants are included.
 """
