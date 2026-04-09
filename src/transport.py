@@ -25,7 +25,7 @@ from src.config import (
 # -------------------------------------------------------------------------
 def _read_csv_auto(path) -> pd.DataFrame:
     """Lecture CSV avec détection automatique du séparateur."""
-    return pd.read_csv(path, sep=None, engine="python")
+    return pd.read_csv(path, sep=";", encoding="utf-8")
 
 
 def _split_geopoint(series: pd.Series) -> pd.DataFrame:
@@ -95,7 +95,7 @@ def process_transport_arrets() -> pd.DataFrame:
     df = df[["id", "name", "type", "lat", "lng", "town", "postal_region"]].copy()
 
     TRANSPORT_ARRETS_SILVER.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(TRANSPORT_ARRETS_SILVER, index=False)
+    df.to_csv(TRANSPORT_ARRETS_SILVER, index=False, encoding="utf-8")
 
     print(f"[transport_arrets] {len(df)} rows saved → {TRANSPORT_ARRETS_SILVER.name}")
     print(f"  Breakdown: {df['type'].value_counts().to_dict()}")
@@ -151,7 +151,7 @@ def process_velib() -> pd.DataFrame:
     df = df[["id", "name", "type", "lat", "lng", "capacity", "code_insee", "commune"]].copy()
 
     TRANSPORT_VELIB_SILVER.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(TRANSPORT_VELIB_SILVER, index=False)
+    df.to_csv(TRANSPORT_VELIB_SILVER, index=False, encoding="utf-8")
 
     print(f"[velib] {len(df)} rows saved → {TRANSPORT_VELIB_SILVER.name}")
     return df
