@@ -50,17 +50,39 @@ class DataStore:
         ``code_iris`` is normalised to a zero-padded 9-character string so that
         URL path parameters always match.  ``school_count`` is cast to ``int``
         (missing values become 0).
+
+        Missing files produce an empty DataFrame with a warning instead of
+        crashing the API — useful when the pipeline hasn't been run yet.
         """
-        iris_scores = pd.read_csv(SCHOOL_DENSITY_GOLD, dtype={"code_iris": str})
-        iris_scores["code_iris"] = iris_scores["code_iris"].str.zfill(9)
-        iris_scores["school_count"] = (
-            iris_scores["school_count"].fillna(0).astype(int)
-        )
+        import logging
+        logger = logging.getLogger(__name__)
 
-        schools = pd.read_csv(SCHOOLS_SILVER, dtype={"code_insee": str})
+        if SCHOOL_DENSITY_GOLD.exists():
+            logger.info("Loading gold: %s", SCHOOL_DENSITY_GOLD.name)
+            iris_scores = pd.read_csv(SCHOOL_DENSITY_GOLD, dtype={"code_iris": str})
+            iris_scores["code_iris"] = iris_scores["code_iris"].str.zfill(9)
+            iris_scores["school_count"] = iris_scores["school_count"].fillna(0).astype(int)
+            logger.info("  → %d IRIS zones loaded", len(iris_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py`", SCHOOL_DENSITY_GOLD)
+            iris_scores = pd.DataFrame()
 
-        population = pd.read_csv(POPULATION_SILVER, dtype={"IRIS": str})
-        population["IRIS"] = population["IRIS"].str.zfill(9)
+        if SCHOOLS_SILVER.exists():
+            logger.info("Loading silver: %s", SCHOOLS_SILVER.name)
+            schools = pd.read_csv(SCHOOLS_SILVER, dtype={"code_insee": str})
+            logger.info("  → %d schools loaded", len(schools))
+        else:
+            logger.warning("Silver file not found: %s — run `python run_pipeline.py`", SCHOOLS_SILVER)
+            schools = pd.DataFrame()
+
+        if POPULATION_SILVER.exists():
+            logger.info("Loading silver: %s", POPULATION_SILVER.name)
+            population = pd.read_csv(POPULATION_SILVER, dtype={"IRIS": str})
+            population["IRIS"] = population["IRIS"].str.zfill(9)
+            logger.info("  → %d population zones loaded", len(population))
+        else:
+            logger.warning("Silver file not found: %s — run `python run_pipeline.py`", POPULATION_SILVER)
+            population = pd.DataFrame()
 
         return cls(
             iris_scores=_clean_df(iris_scores),

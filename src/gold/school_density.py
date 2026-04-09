@@ -20,10 +20,12 @@ import pandas as pd
 from src.config import (
     BUFFER_METERS,
     IRIS_GEOJSON,
+    IRIS_SILVER,
     POPULATION_SILVER,
     SCHOOL_DENSITY_GOLD,
     SCHOOLS_SILVER,
 )
+from src.db import engine
 
 
 def compute_school_density() -> pd.DataFrame:
@@ -38,6 +40,14 @@ def compute_school_density() -> pd.DataFrame:
     # ── Load silver data ─────────────────────────────────────────────────────
     iris = gpd.read_file(IRIS_GEOJSON)
     iris = iris[iris["dep"] == "75"].copy()
+
+    iris_meta = pd.read_csv(IRIS_SILVER, dtype={"CODE_IRIS": str})
+    iris_meta = iris_meta[["CODE_IRIS", "NOM_COM", "NOM_IRIS", "IRIS"]].rename(columns={
+        "CODE_IRIS": "code_iris",
+        "NOM_COM":   "LIBCOM",
+        "NOM_IRIS":  "LIBIRIS",
+        "IRIS":      "GRD_QUART",
+    })
 
     population = pd.read_csv(POPULATION_SILVER, dtype={"IRIS": str})
     schools    = pd.read_csv(SCHOOLS_SILVER)
@@ -69,7 +79,14 @@ def compute_school_density() -> pd.DataFrame:
         result["school_count"] / result["population"] * 1000
     ).round(2)
 
+    # ── Add IRIS metadata (LIBCOM, LIBIRIS, GRD_QUART) for API compatibility ─
+    iris_meta["code_iris"] = iris_meta["code_iris"].astype(str).str.zfill(9)
+    result["code_iris"] = result["IRIS"].str.zfill(9)
+    result = result.merge(iris_meta, on="code_iris", how="left")
+
+    SCHOOL_DENSITY_GOLD.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(SCHOOL_DENSITY_GOLD, index=False)
-    print(f"[school_density] {len(result)} IRIS zones saved → {SCHOOL_DENSITY_GOLD.name}")
+    result.to_sql("school_density", engine, if_exists="replace", index=False)
+    print(f"[school_density] {len(result)} IRIS zones saved → {SCHOOL_DENSITY_GOLD.name} + DB")
     print(f"  Avg schools per 1000 residents: {result['schools_per_1000'].mean():.2f}")
     return result
