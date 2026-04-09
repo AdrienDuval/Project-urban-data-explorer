@@ -13,12 +13,23 @@ from api.services.data_loader import DataStore
 
 def _row_to_zone(row: pd.Series) -> PopulationZone:
     return PopulationZone(
-        code_iris=str(row["IRIS"]),
-        arrondissement=str(row["LIBCOM"]),
-        name=str(row["LIBIRIS"]),
-        quarter_code=str(row["GRD_QUART"]),
+        code_iris=str(row["IRIS"]).zfill(9),
+        arrondissement=str(row.get("LIBCOM", "")),
+        name=str(row.get("LIBIRIS", row.get("LAB_IRIS", ""))),
+        quarter_code=str(row.get("GRD_QUART", "")),
         population=float(row["population"]),
     )
+
+
+def _enrich_population(store: DataStore) -> pd.DataFrame:
+    """Join population silver with iris_scores gold to add LIBCOM/LIBIRIS/GRD_QUART."""
+    pop = store.population.copy()
+    pop["IRIS"] = pop["IRIS"].astype(str).str.zfill(9)
+    if store.iris_scores.empty:
+        return pop
+    meta = store.iris_scores[["code_iris", "LIBCOM", "LIBIRIS", "GRD_QUART"]].copy()
+    meta = meta.rename(columns={"code_iris": "IRIS"})
+    return pop.merge(meta, on="IRIS", how="left")
 
 
 def _paginate(df: pd.DataFrame, page: int, size: int) -> tuple[pd.DataFrame, int]:
@@ -42,7 +53,7 @@ def list_population_zones(
         page:           1-based page number.
         size:           Page size (max enforced by the router).
     """
-    df = store.population.copy()
+    df = _enrich_population(store)
 
     if arrondissement:
         df = df[df["LIBCOM"].str.contains(arrondissement, case=False, na=False)]
@@ -67,7 +78,8 @@ def get_population_zone(
     Returns ``None`` when the code is not found in the residential dataset.
     """
     code_iris = code_iris.zfill(9)
-    matches = store.population[store.population["IRIS"] == code_iris]
+    df = _enrich_population(store)
+    matches = df[df["IRIS"] == code_iris]
     if matches.empty:
         return None
     return _row_to_zone(matches.iloc[0])

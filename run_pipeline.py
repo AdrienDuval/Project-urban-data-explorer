@@ -14,10 +14,22 @@ Run only the silver → gold step (requires silver to exist):
 """
 import argparse
 
+from src.data_loader import load_data
+from src.gold.reference import load_reference_tables
 from src.gold.school_density import compute_school_density
+from src.silver.bdcom import process_bdcom
+from src.silver.dvf import process_dvf
+from src.silver.hospitals import process_hospitals
 from src.silver.iris import process_iris
 from src.silver.population import process_population
 from src.silver.schools import process_schools
+
+
+def run_bronze() -> None:
+    print("─" * 40)
+    print("Download → Bronze")
+    print("─" * 40)
+    load_data()
 
 
 def run_silver() -> None:
@@ -27,12 +39,16 @@ def run_silver() -> None:
     process_iris()
     process_population()
     process_schools()
+    process_dvf()
+    process_bdcom()
+    process_hospitals()
 
 
 def run_gold() -> None:
     print("─" * 40)
     print("Silver → Gold")
     print("─" * 40)
+    load_reference_tables()
     compute_school_density()
 
 
@@ -47,5 +63,6 @@ if __name__ == "__main__":
     elif args.gold:
         run_gold()
     else:
+        run_bronze()
         run_silver()
         run_gold()

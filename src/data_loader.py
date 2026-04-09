@@ -1,14 +1,20 @@
 # data_loader.py
-import os
 import time
 import logging
 import gdown
-from pathlib import Path
+from src.config import BRONZE
 
 # ----------------------------
 # CONFIG
 # ----------------------------
-FOLDER_URL = "https://drive.google.com/drive/folders/1-fC3EKyPfzX1vry8G0mQ8Unyeq8p-adx"
+# Each entry: (subfolder name under bronze/, Drive folder URL)
+BRONZE_SUBFOLDERS = [
+    ("main_data",                   "https://drive.google.com/drive/folders/1WkfU2mNs19nhgsfK-qoho74RaCcNj08y"),
+    ("indice_vivabilite_familiale", "https://drive.google.com/drive/folders/1F9m1BrjhrhE5Awm2H6bPpd5IJ3FjRqLx"),
+    ("public_service_data",         "https://drive.google.com/drive/folders/1Tf8FMyGvAL7cVSYLdR8E5GTf-mCXhCJe"),
+    ("transport_data",              "https://drive.google.com/drive/folders/1V7ZdJ6qNzilavQW3XUmA0q66rqW9UYTk"),
+]
+
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
@@ -22,40 +28,24 @@ logging.basicConfig(
 )
 
 
-# ----------------------------
-# HELPERS
-# ----------------------------
-def get_project_root():
-    """
-    Returns the project root path (where run_pipeline.py or data folder exists)
-    """
-    current_path = Path.cwd()  # start from current working directory
-    while current_path != current_path.parent:
-        if (current_path / "run_pipeline.py").exists() or (current_path / "data").exists():
-            return current_path
-        current_path = current_path.parent
-    # fallback to current working directory
-    return Path.cwd()
+def _download_subfolder(name, url, max_retries=MAX_RETRIES):
+    target = BRONZE / name
+    if target.exists() and any(target.iterdir()):
+        logging.info("Skipping '%s' — already populated.", name)
+        return True
 
-
-def download_data(folder_url=FOLDER_URL, output_folder=None, max_retries=MAX_RETRIES):
-    if output_folder is None:
-        project_root = get_project_root()
-        output_folder = project_root / "data"
-    output_folder.mkdir(parents=True, exist_ok=True)
-
-    attempt = 0
-    while attempt < max_retries:
+    target.mkdir(parents=True, exist_ok=True)
+    for attempt in range(1, max_retries + 1):
         try:
-            logging.info(f"Starting download attempt {attempt + 1} to {output_folder}...")
-            gdown.download_folder(folder_url, output=str(output_folder), quiet=False)
-            logging.info("Download completed successfully.")
+            logging.info("Downloading '%s' (attempt %d)...", name, attempt)
+            gdown.download_folder(url, output=str(target), quiet=False, remaining_ok=True)
+            logging.info("'%s' downloaded successfully.", name)
             return True
         except Exception as e:
-            attempt += 1
-            logging.warning(f"Download failed: {e}. Retrying in {RETRY_DELAY}s...")
+            logging.warning("Failed to download '%s': %s. Retrying in %ds...", name, e, RETRY_DELAY)
             time.sleep(RETRY_DELAY)
-    logging.error("Failed to download data after multiple attempts.")
+
+    logging.error("Could not download '%s' after %d attempts.", name, max_retries)
     return False
 
 
@@ -64,32 +54,30 @@ def download_data(folder_url=FOLDER_URL, output_folder=None, max_retries=MAX_RET
 # ----------------------------
 def load_data(force_update=False):
     """
-    Ensures the 'data/' folder exists in the project root and is populated.
+    Ensures each bronze subfolder exists and is populated from Google Drive.
 
     Args:
-        force_update (bool): If True, downloads data even if folder exists.
+        force_update (bool): If True, re-downloads even if folders already exist.
     """
-    project_root = get_project_root()
-    data_folder = project_root / "data"
+    BRONZE.mkdir(parents=True, exist_ok=True)
 
-    if force_update or not data_folder.exists() or not any(data_folder.iterdir()):
-        logging.info(f"Data folder missing or empty at {data_folder}. Downloading...")
-        success = download_data(output_folder=data_folder)
-        if success:
-            logging.info("Data downloaded successfully.")
-        else:
-            logging.error("Failed to download data.")
+    if force_update:
+        import shutil
+        shutil.rmtree(BRONZE)
+        BRONZE.mkdir(parents=True, exist_ok=True)
+
+    all_ok = True
+    for name, url in BRONZE_SUBFOLDERS:
+        ok = _download_subfolder(name, url)
+        all_ok = all_ok and ok
+
+    if all_ok:
+        logging.info("All bronze subfolders ready.")
     else:
-        logging.info(f"Data folder already exists at {data_folder}. Skipping download.")
-
-    # Return list of files for convenience
-    files = [str(f) for f in data_folder.iterdir()]
-    return files
-
+        logging.error("Some subfolders failed to download — check logs above.")
 
 # ----------------------------
 # Example usage
 # ----------------------------
 if __name__ == "__main__":
-    files = load_data()
-    logging.info(f"Data files available: {files}")
+    load_data()
