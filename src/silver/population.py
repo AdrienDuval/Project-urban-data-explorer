@@ -14,21 +14,20 @@ def process_population() -> pd.DataFrame:
     Extract residential population per IRIS zone for Paris.
 
     Filters:
-    - DEP == '75'  (Paris only)
+    - COM starts with '75'  (Paris only — no DEP column in 2022 CSV)
     - TYP_IRIS == 'H'  (residential zones only, excludes activity/mixed zones)
     - population > MIN_POPULATION  (drops near-empty zones)
 
     Returns:
-        DataFrame with columns: IRIS, LIBCOM, LIBIRIS, GRD_QUART, population
+        DataFrame with columns: IRIS, LAB_IRIS, population
     """
-    # The census file has 5 metadata rows before the actual header
-    df = pd.read_excel(POPULATION_RAW, header=5, sheet_name="IRIS")
+    df = pd.read_csv(POPULATION_RAW, sep=";", dtype={"IRIS": str, "COM": str})
 
-    paris = df[df["DEP"] == "75"].copy()
+    paris = df[df["COM"].str.startswith("75")].copy()
     paris = paris[paris["TYP_IRIS"] == "H"]
 
-    paris = paris[["IRIS", "LIBCOM", "LIBIRIS", "GRD_QUART", "P19_POP_FR"]]
-    paris = paris.rename(columns={"P19_POP_FR": "population"})
+    paris = paris[["IRIS", "LAB_IRIS", "P22_POP_FR"]]
+    paris = paris.rename(columns={"P22_POP_FR": "population"})
     paris = paris[paris["population"] > MIN_POPULATION]
 
     paris.to_csv(POPULATION_SILVER, index=False)
