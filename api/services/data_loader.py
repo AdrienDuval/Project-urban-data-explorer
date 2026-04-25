@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from src.config import POPULATION_SILVER, SCHOOL_DENSITY_GOLD, SCHOOLS_SILVER
+from src.config import POPULATION_SILVER, SCHOOL_DENSITY_GOLD, SCHOOLS_SILVER,TRANSPORT_SCORE_GOLD,TRANSPORT_POINTS_GOLD
 
 
 def _clean_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -28,16 +28,18 @@ class DataStore:
 
     Attributes:
         iris_scores:  Gold-layer DataFrame (992 rows) – one row per Paris IRIS
-                      zone with school-count, schools_per_1000, and school_score.
+                zone with school-count, schools_per_1000, and school_score.
         schools:      Silver-layer DataFrame (1 377 rows) – deduplicated school
-                      catalog with lat/lng coordinates.
+                catalog with lat/lng coordinates.
         population:   Silver-layer DataFrame (861 rows) – residential IRIS zones
-                      with 2019 census population.
+                    with 2019 census population.
     """
 
     iris_scores: pd.DataFrame
     schools: pd.DataFrame
     population: pd.DataFrame
+    transport_scores: pd.DataFrame
+    transport_points: pd.DataFrame
 
     # ------------------------------------------------------------------
     # Factory
@@ -83,9 +85,22 @@ class DataStore:
         else:
             logger.warning("Silver file not found: %s — run `python run_pipeline.py`", POPULATION_SILVER)
             population = pd.DataFrame()
+        
+        if TRANSPORT_SCORE_GOLD.exists():
+            transport_scores = pd.read_csv(TRANSPORT_SCORE_GOLD, dtype={"CODE_IRIS": str})
+            transport_scores["CODE_IRIS"] = transport_scores["CODE_IRIS"].str.zfill(9)
+        else:
+            transport_scores = pd.DataFrame()
+
+        if TRANSPORT_POINTS_GOLD.exists():
+            transport_points = pd.read_csv(TRANSPORT_POINTS_GOLD, dtype={"id": str})
+        else:
+            transport_points = pd.DataFrame()
 
         return cls(
             iris_scores=_clean_df(iris_scores),
             schools=_clean_df(schools),
             population=_clean_df(population),
+            transport_scores=_clean_df(transport_scores),
+            transport_points=_clean_df(transport_points),
         )
