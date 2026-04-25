@@ -17,13 +17,15 @@ import argparse
 from src.data_loader import load_data
 from src.gold.reference import load_reference_tables
 from src.gold.school_density import compute_school_density
+from src.gold.transport_score import compute_transport_score
+from src.gold.transport_points import compute_transport_points
 from src.silver.bdcom import process_bdcom
 from src.silver.dvf import process_dvf
 from src.silver.hospitals import process_hospitals
 from src.silver.iris import process_iris
 from src.silver.population import process_population
 from src.silver.schools import process_schools
-from src.gold.transport_score import compute_transport_score
+
 from src.silver.transport import process_transport
 
 def run_bronze() -> None:
@@ -52,6 +54,8 @@ def run_gold() -> None:
     load_reference_tables()
     compute_school_density()
     compute_transport_score()
+    compute_transport_points()
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the indice familiale pipeline.")

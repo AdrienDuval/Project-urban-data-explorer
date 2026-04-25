@@ -59,7 +59,7 @@ TRANSPORT_VELIB_SILVER  = SILVER / "velib_paris.csv"
 SCHOOL_DENSITY_GOLD = GOLD / "schools_score_iris.csv"
 
 TRANSPORT_SCORE_GOLD = GOLD / "transport_score_iris.csv"
-
+TRANSPORT_POINTS_GOLD = GOLD / "transport_points.csv" 
 # ── Pipeline settings ──────────────────────────────────────────────────────────
 # Radius (metres) around each IRIS centroid used to count nearby schools
 BUFFER_METERS = 500
