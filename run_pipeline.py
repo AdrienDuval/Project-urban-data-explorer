@@ -22,7 +22,13 @@ from src.silver.dvf import process_dvf
 from src.silver.hospitals import process_hospitals
 from src.silver.iris import process_iris
 from src.silver.population import process_population
+from src.silver.rent_data_to_silver import process_rent_data_to_silver
 from src.silver.schools import process_schools
+from src.silver.thermal_comfort_to_silver import process_thermal_comfort_silver
+from src.gold.thermal_comfort_to_gold import process_thermal_comfort_gold
+from src.gold.sale_price_median_to_gold import process_sale_price_median_to_gold
+from src.silver.sale_price_median_to_silver import process_sale_price_median_to_silver
+from src.gold.rent_data_to_gold import process_rent_data_to_gold
 
 
 def run_bronze() -> None:
@@ -42,6 +48,9 @@ def run_silver() -> None:
     process_dvf()
     process_bdcom()
     process_hospitals()
+    process_thermal_comfort_silver()
+    process_sale_price_median_to_silver()
+    process_rent_data_to_silver()
 
 
 def run_gold() -> None:
@@ -50,6 +59,9 @@ def run_gold() -> None:
     print("─" * 40)
     load_reference_tables()
     compute_school_density()
+    process_thermal_comfort_gold()
+    process_sale_price_median_to_gold()
+    process_rent_data_to_gold()
 
 
 if __name__ == "__main__":
