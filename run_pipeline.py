@@ -32,6 +32,7 @@ from src.silver.hospitals import process_hospitals
 from src.silver.iris import process_iris
 from src.silver.population import process_population
 from src.silver.schools import process_schools
+
 from src.silver.transport import process_transport
 
 def run_bronze() -> None:
@@ -54,7 +55,6 @@ def run_silver() -> None:
     process_green_spaces()
     process_transport()
 
-
 def run_gold() -> None:
     print("─" * 40)
     print("Silver → Gold")
@@ -67,7 +67,6 @@ def run_gold() -> None:
     compute_services_score()
     compute_green_spaces_score()
     compute_vivabilite_familiale()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the indice familiale pipeline.")
