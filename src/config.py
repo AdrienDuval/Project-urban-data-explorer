@@ -21,6 +21,8 @@ POPULATION_RAW   = BRONZE / "main_data" / "base-ic-evol-struct-pop-2022.CSV"
 COLLEGES_RAW     = BRONZE / "indice_vivabilite_familiale" / "etablissements-scolaires-colleges.xlsx"
 ELEMENTAIRES_RAW = BRONZE / "indice_vivabilite_familiale" / "etablissements-scolaires-ecoles-elementaires.xlsx"
 MATERNELLES_RAW  = BRONZE / "indice_vivabilite_familiale" / "etablissements-scolaires-maternelles.xlsx"
+# Indicator 2 — green spaces
+ESPACES_VERTS_RAW = BRONZE / "indice_vivabilite_familiale" / "espaces_verts.geojson"
 # DVF — housing transactions
 DVF_RAW          = BRONZE / "public_service_data" / "ValeursFoncieres-2025.txt"
 # BDCOM — public service establishments
@@ -28,8 +30,7 @@ BDCOM_RAW        = BRONZE / "public_service_data" / "BDCOM_2023.csv"
 BDCOM_OD_RAW     = BRONZE / "public_service_data" / "BDCOM_2023_OD.xlsx"
 # Hospitals
 HOSPITALS_RAW    = BRONZE / "public_service_data" / "les_etablissements_hospitaliers_franciliens.csv"
-
-#indicator 2
+# Indicator 3 — transport
 TRANSPORT_ARRETS_RAW = BRONZE / "transport_data" / "arrets.csv"
 TRANSPORT_VELIB_RAW  = BRONZE / "transport_data" / "velib.csv"
 
@@ -43,6 +44,7 @@ SCHOOLS_SILVER    = SILVER / "schools_merged.csv"
 DVF_SILVER        = SILVER / "dvf_paris_clean.csv"
 BDCOM_SILVER      = SILVER / "bdcom_paris_clean.csv"
 HOSPITALS_SILVER  = SILVER / "hospitals_paris_clean.csv"
+ESPACES_VERTS_SILVER = SILVER / "espaces_verts_paris.geojson"
 
 # ── DVF filter settings ────────────────────────────────────────────────────────
 DVF_TYPES_TO_KEEP = ["Appartement", "Maison"]
@@ -56,13 +58,18 @@ TRANSPORT_VELIB_SILVER  = SILVER / "velib_paris.csv"
 
 
 # ── Gold outputs ───────────────────────────────────────────────────────────────
-SCHOOL_DENSITY_GOLD = GOLD / "schools_score_iris.csv"
-
-TRANSPORT_SCORE_GOLD = GOLD / "transport_score_iris.csv"
+SCHOOL_DENSITY_GOLD      = GOLD / "schools_score_iris.csv"
+TRANSPORT_SCORE_GOLD     = GOLD / "transport_score_iris.csv"
+SERVICES_SCORE_GOLD      = GOLD / "services_score_iris.csv"
+GREEN_SPACES_SCORE_GOLD  = GOLD / "green_spaces_score_iris.csv"
+VIVABILITE_GOLD          = GOLD / "vivabilite_familiale_iris.csv"
 
 # ── Pipeline settings ──────────────────────────────────────────────────────────
-# Radius (metres) around each IRIS centroid used to count nearby schools
+# Radius (metres) around each IRIS centroid used to count nearby schools/stops
 BUFFER_METERS = 500
+
+# Additional buffer for green spaces adjacency bonus
+GREEN_SPACES_BUFFER_METERS = 300
 
 # IRIS zones with fewer residents than this are excluded
 MIN_POPULATION = 500
@@ -85,4 +92,12 @@ TRANSPORT_WEIGHTS = {
     "bus": 0.4,
     "cableway": 0.5,
     "velib": 0.3,
+}
+
+# ── Vivabilité familiale composite weights ────────────────────────────────────
+VIVABILITE_WEIGHTS = {
+    "school_score":       0.25,
+    "transport_score":    0.25,
+    "services_score":     0.25,
+    "green_spaces_score": 0.25,
 }
