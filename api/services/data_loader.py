@@ -9,12 +9,18 @@ themselves.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import pandas as pd
 
-from src.config import POPULATION_SILVER, SCHOOL_DENSITY_GOLD, SCHOOLS_SILVER, VIVABILITE_GOLD
+from src.config import (
+    POPULATION_SILVER,
+    SCHOOL_DENSITY_GOLD,
+    SCHOOLS_SILVER,
+    TRANSPORT_INDICATOR_GOLD,
+    TRANSPORT_POINTS_GOLD,
+    VIVABILITE_GOLD,
+)
 
 
 def _clean_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -27,9 +33,12 @@ class DataStore:
     """In-memory snapshot of all datasets used by the API.
 
     Attributes:
-        iris_scores:      Gold school-density DataFrame – one row per Paris IRIS.
-        schools:          Silver school catalog with lat/lng.
-        population:       Silver population per IRIS zone.
+        iris_scores:  Gold-layer DataFrame (992 rows) – one row per Paris IRIS
+            zone with school-count, schools_per_1000, and school_score.
+        schools:      Silver-layer DataFrame (1 377 rows) – deduplicated school
+            catalog with lat/lng coordinates.
+        population:   Silver-layer DataFrame (861 rows) – residential IRIS zones
+            with 2019 census population.
         vivabilite_scores: Gold composite family-liveability score per IRIS.
     """
 
@@ -37,6 +46,8 @@ class DataStore:
     schools: pd.DataFrame
     population: pd.DataFrame
     vivabilite_scores: pd.DataFrame
+    transport_scores: pd.DataFrame
+    transport_points: pd.DataFrame
 
     # ------------------------------------------------------------------
     # Factory
@@ -82,6 +93,17 @@ class DataStore:
         else:
             logger.warning("Silver file not found: %s — run `python run_pipeline.py`", POPULATION_SILVER)
             population = pd.DataFrame()
+        
+        if TRANSPORT_INDICATOR_GOLD.exists():
+            transport_scores = pd.read_csv(TRANSPORT_INDICATOR_GOLD, dtype={"CODE_IRIS": str})
+            transport_scores["CODE_IRIS"] = transport_scores["CODE_IRIS"].str.zfill(9)
+        else:
+            transport_scores = pd.DataFrame()
+
+        if TRANSPORT_POINTS_GOLD.exists():
+            transport_points = pd.read_csv(TRANSPORT_POINTS_GOLD, dtype={"id": str})
+        else:
+            transport_points = pd.DataFrame()
 
         if VIVABILITE_GOLD.exists():
             logger.info("Loading gold: %s", VIVABILITE_GOLD.name)
@@ -97,4 +119,6 @@ class DataStore:
             schools=_clean_df(schools),
             population=_clean_df(population),
             vivabilite_scores=_clean_df(vivabilite_scores),
+            transport_scores=_clean_df(transport_scores),
+            transport_points=_clean_df(transport_points),
         )

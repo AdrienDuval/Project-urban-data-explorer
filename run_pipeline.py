@@ -19,7 +19,11 @@ from src.gold.green_spaces_score import compute_green_spaces_score
 from src.gold.reference import load_reference_tables
 from src.gold.school_density import compute_school_density
 from src.gold.services_score import compute_services_score
-from src.gold.transport_score import compute_transport_score
+from src.gold.transport_score import (
+    compute_transport_indicator_score,
+    compute_transport_score,
+)
+from src.gold.transport_points import compute_transport_points
 from src.gold.vivabilite_familiale import compute_vivabilite_familiale
 from src.silver.bdcom import process_bdcom
 from src.silver.dvf import process_dvf
@@ -28,8 +32,7 @@ from src.silver.hospitals import process_hospitals
 from src.silver.iris import process_iris
 from src.silver.population import process_population
 from src.silver.schools import process_schools
-from src.transport import process_transport
-
+from src.silver.transport import process_transport
 
 def run_bronze() -> None:
     print("─" * 40)
@@ -59,6 +62,8 @@ def run_gold() -> None:
     load_reference_tables()
     compute_school_density()
     compute_transport_score()
+    compute_transport_indicator_score()
+    compute_transport_points()
     compute_services_score()
     compute_green_spaces_score()
     compute_vivabilite_familiale()
