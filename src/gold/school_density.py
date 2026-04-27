@@ -28,6 +28,13 @@ from src.config import (
 from src.db import engine
 
 
+def _normalize_0_10(series: pd.Series) -> pd.Series:
+    mn, mx = series.min(), series.max()
+    if mx == mn:
+        return pd.Series(5.0, index=series.index)
+    return ((series - mn) / (mx - mn) * 10).round(2)
+
+
 def compute_school_density() -> pd.DataFrame:
     """
     Compute schools per IRIS zone (with buffer) and save to gold.
@@ -35,7 +42,7 @@ def compute_school_density() -> pd.DataFrame:
     Returns:
         DataFrame with columns:
             IRIS, LIBCOM, LIBIRIS, GRD_QUART, population,
-            school_count, schools_per_1000
+            school_count, schools_per_1000, school_score
     """
     # ── Load silver data ─────────────────────────────────────────────────────
     iris = gpd.read_file(IRIS_GEOJSON)
@@ -78,6 +85,7 @@ def compute_school_density() -> pd.DataFrame:
     result["schools_per_1000"] = (
         result["school_count"] / result["population"] * 1000
     ).round(2)
+    result["school_score"] = _normalize_0_10(result["schools_per_1000"])
 
     # ── Add IRIS metadata (LIBCOM, LIBIRIS, GRD_QUART) for API compatibility ─
     iris_meta["code_iris"] = iris_meta["code_iris"].astype(str).str.zfill(9)

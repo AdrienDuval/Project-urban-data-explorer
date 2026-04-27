@@ -1,16 +1,13 @@
 """
 Silver → Gold: Indice de vivabilité familiale (composite score)
 
-Combines four sub-indicators into a single 0–10 family liveability score
+Combines family-focused sub-indicators into a single 0–10 family suitability score
 for each Paris IRIS zone:
 
-    vivabilite = (school_score × 0.25)
-               + (transport_score × 0.25)
-               + (services_score × 0.25)
-               + (green_spaces_score × 0.25)
+    schools + childcare + safety + healthcare + environment
+    + green spaces + transport + daily services
 
-Each sub-score is already normalised 0–10 by its own Gold script, so the
-composite is also on the same 0–10 scale without further normalisation.
+Housing price / affordability is intentionally excluded for now.
 
 A rank (1 = best zone in Paris) is also computed and stored.
 
@@ -21,7 +18,10 @@ Output:
 import pandas as pd
 
 from src.config import (
+    DAILY_SERVICES_SCORE_GOLD,
+    FAMILY_FACTORS_GOLD,
     GREEN_SPACES_SCORE_GOLD,
+    HEALTHCARE_SCORE_GOLD,
     SCHOOL_DENSITY_GOLD,
     SERVICES_SCORE_GOLD,
     TRANSPORT_SCORE_GOLD,
@@ -30,61 +30,122 @@ from src.config import (
 )
 from src.db import engine
 
-# Columns to carry over from sub-score files (metadata only, no duplication)
 META_COLS = ["IRIS", "LIBCOM", "LIBIRIS", "GRD_QUART", "population", "code_iris"]
+SCORE_COLS = list(VIVABILITE_WEIGHTS.keys())
+
+
+def _read_gold(path, *, dtype_cols=("IRIS", "code_iris")) -> pd.DataFrame:
+    dtype = {col: str for col in dtype_cols}
+    df = pd.read_csv(path, dtype=dtype)
+    df["IRIS"] = df["IRIS"].astype(str).str.zfill(9)
+    if "code_iris" in df.columns:
+        df["code_iris"] = df["code_iris"].astype(str).str.zfill(9)
+    return df
 
 
 def compute_vivabilite_familiale() -> pd.DataFrame:
     """
-    Build the composite family liveability score from the four Gold sub-scores.
+    Build the composite family liveability score from expanded Gold sub-scores.
 
     Reads each sub-score CSV, merges on IRIS code, applies VIVABILITE_WEIGHTS,
-    and writes the result.
+    and writes the result. Childcare, safety, and environment use a flat
+    neutral sub-score (5.0) until per-IRIS data is available.
 
     Returns:
         DataFrame with columns:
             IRIS, code_iris, LIBCOM, LIBIRIS, GRD_QUART, population,
-            school_score, transport_score, services_score, green_spaces_score,
+            school_score, childcare_score, safety_score, healthcare_score,
+            environment_score, green_spaces_score, transport_score,
+            daily_services_score,
             vivabilite_score, vivabilite_rank
     """
     print("[vivabilite] Loading sub-scores...")
 
     # ── Load sub-scores ───────────────────────────────────────────────────────
-    schools = pd.read_csv(SCHOOL_DENSITY_GOLD, dtype={"IRIS": str, "code_iris": str})
-    schools["IRIS"] = schools["IRIS"].str.zfill(9)
-    # Normalise schools_per_1000 to 0–10 as school_score (not yet in that file)
-    mn, mx = schools["schools_per_1000"].min(), schools["schools_per_1000"].max()
-    if mx > mn:
-        schools["school_score"] = ((schools["schools_per_1000"] - mn) / (mx - mn) * 10).round(2)
-    else:
-        schools["school_score"] = 5.0
-
-    transport = pd.read_csv(TRANSPORT_SCORE_GOLD, dtype={"IRIS": str, "code_iris": str})
-    transport["IRIS"] = transport["IRIS"].str.zfill(9)
-
-    services = pd.read_csv(SERVICES_SCORE_GOLD, dtype={"IRIS": str, "code_iris": str})
-    services["IRIS"] = services["IRIS"].str.zfill(9)
-
-    green = pd.read_csv(GREEN_SPACES_SCORE_GOLD, dtype={"IRIS": str, "code_iris": str})
-    green["IRIS"] = green["IRIS"].str.zfill(9)
+    schools = _read_gold(SCHOOL_DENSITY_GOLD)
+    transport = _read_gold(TRANSPORT_SCORE_GOLD)
+    services = _read_gold(SERVICES_SCORE_GOLD)
+    green = _read_gold(GREEN_SPACES_SCORE_GOLD)
+    healthcare = _read_gold(HEALTHCARE_SCORE_GOLD)
+    daily_services = _read_gold(DAILY_SERVICES_SCORE_GOLD)
+    family_factors = _read_gold(FAMILY_FACTORS_GOLD)
 
     # ── Start with school metadata as base ───────────────────────────────────
-    base_cols = [c for c in META_COLS if c in schools.columns] + ["school_score"]
+    school_cols = [
+        "school_count",
+        "schools_per_1000",
+        "school_score",
+    ]
+    base_cols = [c for c in META_COLS if c in schools.columns] + school_cols
     result = schools[base_cols].copy()
 
     # ── Merge other scores ────────────────────────────────────────────────────
     result = result.merge(
-        transport[["IRIS", "transport_score"]], on="IRIS", how="left"
+        transport[["IRIS", "stop_count", "weighted_stops", "transport_score"]],
+        on="IRIS",
+        how="left",
     )
     result = result.merge(
-        services[["IRIS", "services_score"]], on="IRIS", how="left"
+        services[["IRIS", "hospital_count", "service_count", "weighted_services", "services_score"]],
+        on="IRIS",
+        how="left",
     )
     result = result.merge(
-        green[["IRIS", "green_spaces_score"]], on="IRIS", how="left"
+        green[
+            [
+                "IRIS",
+                "interior_m2",
+                "adjacent_m2",
+                "total_green_m2",
+                "green_m2_per_resident",
+                "green_spaces_score",
+            ]
+        ],
+        on="IRIS",
+        how="left",
+    )
+    result = result.merge(
+        healthcare[
+            [
+                "IRIS",
+                "hospital_count",
+                "weighted_hospital_count",
+                "healthcare_service_count",
+                "weighted_healthcare_service_count",
+                "weighted_healthcare_access",
+                "healthcare_score",
+            ]
+        ].rename(columns={"hospital_count": "healthcare_hospital_count"}),
+        on="IRIS",
+        how="left",
+    )
+    result = result.merge(
+        daily_services[
+            [
+                "IRIS",
+                "daily_service_count",
+                "weighted_daily_service_count",
+                "daily_services_score",
+            ]
+        ],
+        on="IRIS",
+        how="left",
+    )
+    result = result.merge(
+        family_factors[
+            [
+                "IRIS",
+                "childcare_score",
+                "safety_score",
+                "environment_score",
+            ]
+        ],
+        on="IRIS",
+        how="left",
     )
 
-    # Fill any missing sub-scores with the city-wide median (graceful fallback)
-    for col in ["school_score", "transport_score", "services_score", "green_spaces_score"]:
+    # Fill missing sub-scores with the city-wide median (data-failure fallback).
+    for col in SCORE_COLS:
         median = result[col].median()
         missing = result[col].isna().sum()
         if missing:
@@ -92,12 +153,15 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
         result[col] = result[col].fillna(median)
 
     # ── Composite ─────────────────────────────────────────────────────────────
-    result["vivabilite_score"] = (
-        result["school_score"]       * VIVABILITE_WEIGHTS["school_score"]
-        + result["transport_score"]  * VIVABILITE_WEIGHTS["transport_score"]
-        + result["services_score"]   * VIVABILITE_WEIGHTS["services_score"]
-        + result["green_spaces_score"] * VIVABILITE_WEIGHTS["green_spaces_score"]
-    ).round(2)
+    result["vivabilite_score"] = 0.0
+    for col, weight in VIVABILITE_WEIGHTS.items():
+        result["vivabilite_score"] += result[col] * weight
+    result["vivabilite_score"] = result["vivabilite_score"].round(2)
+
+    result["vivabilite_model"] = "family_non_price_v2"
+    result["vivabilite_weights"] = ";".join(
+        f"{key}:{value}" for key, value in VIVABILITE_WEIGHTS.items()
+    )
 
     # ── Rank (1 = best) ───────────────────────────────────────────────────────
     result["vivabilite_rank"] = result["vivabilite_score"].rank(

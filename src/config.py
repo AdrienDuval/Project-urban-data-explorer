@@ -66,6 +66,9 @@ TRANSPORT_INDICATOR_GOLD = GOLD / "transport_indicator_iris.csv"
 TRANSPORT_POINTS_GOLD    = GOLD / "transport_points.csv"
 SERVICES_SCORE_GOLD      = GOLD / "services_score_iris.csv"
 GREEN_SPACES_SCORE_GOLD  = GOLD / "green_spaces_score_iris.csv"
+HEALTHCARE_SCORE_GOLD    = GOLD / "healthcare_score_iris.csv"
+DAILY_SERVICES_SCORE_GOLD = GOLD / "daily_services_score_iris.csv"
+FAMILY_FACTORS_GOLD      = GOLD / "family_missing_factors_iris.csv"
 VIVABILITE_GOLD          = GOLD / "vivabilite_familiale_iris.csv"
 # ── Pipeline settings ──────────────────────────────────────────────────────────
 # Radius (metres) around each IRIS centroid used to count nearby schools/stops
@@ -98,9 +101,15 @@ TRANSPORT_WEIGHTS = {
 }
 
 # ── Vivabilité familiale composite weights ────────────────────────────────────
+# Non-price family suitability score. Childcare, safety, and environment use a
+# flat neutral sub-score (5.0) until per-IRIS data is available.
 VIVABILITE_WEIGHTS = {
-    "school_score":       0.25,
-    "transport_score":    0.25,
-    "services_score":     0.25,
-    "green_spaces_score": 0.25,
+    "school_score":         0.20,
+    "childcare_score":      0.15,
+    "safety_score":         0.20,
+    "healthcare_score":     0.15,
+    "environment_score":    0.15,
+    "green_spaces_score":   0.075,
+    "transport_score":      0.05,
+    "daily_services_score": 0.025,
 }
