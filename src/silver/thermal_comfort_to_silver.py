@@ -29,6 +29,8 @@ def process_thermal_comfort_silver() -> pd.DataFrame:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # On prend uniquement les IRIS dans Paris (dep=75)
+    iris = iris[iris['dep'] == '75']
 
     # Calcul de la densité des arbres par iris : 
     # Jointure entre jeu de données des iris et localisation des arbres
