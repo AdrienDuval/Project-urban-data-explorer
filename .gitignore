@@ -181,3 +181,5 @@ cython_debug/
 .cursorindexingignore
 
 **/base-ic-evol-struct-pop-2022.csv
+UrbanDataExplorer.pdf
+base_datasets_fr.md
