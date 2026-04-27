@@ -59,11 +59,14 @@ TRANSPORT_VELIB_SILVER  = SILVER / "velib_paris.csv"
 
 # ── Gold outputs ───────────────────────────────────────────────────────────────
 SCHOOL_DENSITY_GOLD      = GOLD / "schools_score_iris.csv"
+# Geopandas buffer-based 0–10 score (input to vivabilité familiale)
 TRANSPORT_SCORE_GOLD     = GOLD / "transport_score_iris.csv"
+# Haversine density/proximity scores 0–1 (transport API /indicators/transport)
+TRANSPORT_INDICATOR_GOLD = GOLD / "transport_indicator_iris.csv"
+TRANSPORT_POINTS_GOLD    = GOLD / "transport_points.csv"
 SERVICES_SCORE_GOLD      = GOLD / "services_score_iris.csv"
 GREEN_SPACES_SCORE_GOLD  = GOLD / "green_spaces_score_iris.csv"
 VIVABILITE_GOLD          = GOLD / "vivabilite_familiale_iris.csv"
-
 # ── Pipeline settings ──────────────────────────────────────────────────────────
 # Radius (metres) around each IRIS centroid used to count nearby schools/stops
 BUFFER_METERS = 500
