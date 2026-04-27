@@ -13,6 +13,9 @@ BRONZE_SUBFOLDERS = [
     ("indice_vivabilite_familiale", "https://drive.google.com/drive/folders/1F9m1BrjhrhE5Awm2H6bPpd5IJ3FjRqLx"),
     ("public_service_data",         "https://drive.google.com/drive/folders/1Tf8FMyGvAL7cVSYLdR8E5GTf-mCXhCJe"),
     ("transport_data",              "https://drive.google.com/drive/folders/1V7ZdJ6qNzilavQW3XUmA0q66rqW9UYTk"),
+    ("indice_confort_thermique",    "https://drive.google.com/drive/folders/1E3yOCO4fL3r3JFRBvcOihwXc0k3NnSzt"),
+    ("sale_price_data",             "https://drive.google.com/drive/folders/1vAFfqW9262i6Jj5X9GxIBNkRg3kRLk6a"),
+    ("rent_data",                   "https://drive.google.com/drive/folders/1OipyPvX6jBDSevbrrdykSKPJDe58xFlt")
 ]
 
 MAX_RETRIES = 3
