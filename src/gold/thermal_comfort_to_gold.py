@@ -2,6 +2,7 @@ import os
 
 import geopandas as gpd
 from src.config import THERMAL_COMFORT_SILVER, THERMAL_COMFORT_GOLD
+from src.db import engine
 
 
 
@@ -34,8 +35,21 @@ def process_thermal_comfort_gold():
         "code_iris", "nom_iris", "densite_arbres", 
         "ratio_fraicheur", "indice_confort_thermique", "geometry"
     ]
-    df[cols_to_keep].to_file(f"{THERMAL_COMFORT_GOLD}", driver="GeoJSON")
-    print("🏆Gold : urban_comfort_index.geojson prêt pour le Dashboard.")
+    
+    gdf_final = df[cols_to_keep].copy()
+    
+    # Sauvegarde en Parquet (conserve la géométrie native pour d'autres usages)
+    gdf_final.to_parquet(THERMAL_COMFORT_GOLD, engine="pyarrow")
+    print("🏆 Gold : urban_comfort_index.parquet prêt pour le Dashboard.")
+    
+    # 6. Insertion en base de données MySQL
+    # Convertir la géométrie en WKT (Well-Known Text) pour MySQL
+    df_sql = gdf_final.copy()
+    df_sql['geometry'] = df_sql['geometry'].apply(lambda geom: geom.wkt if geom else None)
+    
+    # Insertion dans la table 'thermal_comfort'
+    df_sql.to_sql("thermal_comfort", engine, if_exists="replace", index=False)
+    print("💾 Données insérées dans la table MySQL 'thermal_comfort'.")
 
 if __name__ == "__main__":
     process_thermal_comfort_gold()
