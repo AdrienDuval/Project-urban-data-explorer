@@ -31,7 +31,7 @@ Bronze → Silver → Gold data pipeline.
 | **Gold**   | Aggregated school-density score per IRIS zone |
 
 ## Key Concepts
-
+ 
 - **IRIS zone**: The finest French census unit (~2 000 residents).
 - **school_score**: A 0–100 index of how many schools (within a 500 m buffer)
   are accessible per 1 000 residents relative to the rest of Paris.
@@ -44,3 +44,4 @@ CORS_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
 ]
+

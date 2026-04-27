@@ -20,6 +20,8 @@ from fastapi.responses import JSONResponse
 from api.config import API_DESCRIPTION, API_TITLE, API_VERSION, CORS_ORIGINS
 from api.routers import iris, population, schools, stats
 from api.routers.indicators import schools as indicator_schools
+from api.routers.indicators import vivabilite as indicator_vivabilite
+from api.routers.indicators import transport as indicator_transport
 from api.services.data_loader import DataStore
 
 
@@ -70,6 +72,16 @@ def create_app() -> FastAPI:
         indicator_schools.router,
         prefix="/indicators/schools",
         tags=["Indicators — Schools"],
+    )
+    app.include_router(
+        indicator_vivabilite.router,
+        prefix="/indicators/vivabilite-familiale",
+        tags=["Indicators — Vivabilité Familiale"],
+    )
+    app.include_router(
+        indicator_transport.router,
+        prefix="/indicators/transport",
+        tags=["Indicators — Transport"],
     )
     app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
 
