@@ -63,6 +63,14 @@ def compute_green_spaces_score() -> pd.DataFrame:
     gdf_green = gpd.read_file(ESPACES_VERTS_SILVER)
     print(f"[green_spaces_score]   {len(gdf_green):,} spaces loaded")
 
+    if "surface_totale_reelle" not in gdf_green.columns:
+        # Robust fallback for schema drifts from source data.
+        if len(gdf_green) == 0:
+            gdf_green["surface_totale_reelle"] = pd.Series(dtype="float64")
+        else:
+            projected_area = gdf_green.to_crs(epsg=2154).geometry.area
+            gdf_green["surface_totale_reelle"] = projected_area.values
+
     # Work in Lambert-93 so distances and areas are in metres / m²
     gdf_green = gdf_green.to_crs(epsg=2154)
 

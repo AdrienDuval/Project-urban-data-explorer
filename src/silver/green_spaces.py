@@ -18,6 +18,44 @@ DECORATIVE_TYPES = {
     "Decoration sur la voie publique",
 }
 
+OPEN_TOKENS = {"ouvert", "open"}
+CLOSED_TOKENS = {"ferme", "fermé", "closed"}
+YES_TOKENS = {"oui", "o", "yes", "y", "true", "1"}
+NO_TOKENS = {"non", "n", "no", "false", "0"}
+
+
+def _filter_open_spaces(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Filter to spaces considered open using robust status parsing."""
+    if "ouvert_ferme" not in gdf.columns:
+        return gdf
+
+    before = len(gdf)
+    status = gdf["ouvert_ferme"].astype(str).str.strip().str.lower()
+    non_null = status[status.notna() & (status != "nan") & (status != "")]
+    unique_vals = set(non_null.unique())
+
+    keep_mask = None
+    if unique_vals & OPEN_TOKENS:
+        # Explicit "open/closed" encoding in the source.
+        keep_mask = status.isin(OPEN_TOKENS)
+    elif unique_vals & CLOSED_TOKENS:
+        # Explicit "closed" flags are present.
+        keep_mask = ~status.isin(CLOSED_TOKENS)
+    elif unique_vals & YES_TOKENS and unique_vals & NO_TOKENS:
+        # Observed in this dataset: Oui/Non. Here "Non" means "not closed".
+        keep_mask = status.isin(NO_TOKENS)
+
+    if keep_mask is None:
+        print(
+            "[green_spaces]   Open filter skipped (unrecognized values) "
+            f"{sorted(list(unique_vals))[:10]}"
+        )
+        return gdf
+
+    filtered = gdf[keep_mask].copy()
+    print(f"[green_spaces]   Open filter: {len(filtered):,}/{before:,} kept")
+    return filtered
+
 
 def process_green_spaces() -> gpd.GeoDataFrame:
     """
@@ -39,10 +77,7 @@ def process_green_spaces() -> gpd.GeoDataFrame:
     print(f"[green_spaces]   → {len(gdf):,} features loaded")
 
     # ── Filter to open spaces ─────────────────────────────────────────────────
-    if "ouvert_ferme" in gdf.columns:
-        before = len(gdf)
-        gdf = gdf[gdf["ouvert_ferme"].astype(str).str.strip() == "Ouvert"].copy()
-        print(f"[green_spaces]   Open filter: {len(gdf):,}/{before:,} kept")
+    gdf = _filter_open_spaces(gdf)
 
     # ── Drop decorative types ─────────────────────────────────────────────────
     if "type_ev" in gdf.columns:
