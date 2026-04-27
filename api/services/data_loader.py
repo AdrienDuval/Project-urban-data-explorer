@@ -10,10 +10,13 @@ themselves.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from typing import Any
 
 import pandas as pd
 
 from src.config import (
+    IRIS_GEOJSON,
     POPULATION_SILVER,
     SCHOOL_DENSITY_GOLD,
     SCHOOLS_SILVER,
@@ -48,6 +51,7 @@ class DataStore:
     vivabilite_scores: pd.DataFrame
     transport_scores: pd.DataFrame
     transport_points: pd.DataFrame
+    iris_geojson: dict[str, Any]
 
     # ------------------------------------------------------------------
     # Factory
@@ -66,6 +70,15 @@ class DataStore:
         """
         import logging
         logger = logging.getLogger(__name__)
+
+        if IRIS_GEOJSON.exists():
+            logger.info("Loading geometry: %s", IRIS_GEOJSON.name)
+            with IRIS_GEOJSON.open(encoding="utf-8") as fh:
+                iris_geojson = json.load(fh)
+            logger.info("  → %d IRIS geometries loaded", len(iris_geojson.get("features", [])))
+        else:
+            logger.warning("IRIS GeoJSON not found: %s — run `python run_pipeline.py`", IRIS_GEOJSON)
+            iris_geojson = {"type": "FeatureCollection", "features": []}
 
         if SCHOOL_DENSITY_GOLD.exists():
             logger.info("Loading gold: %s", SCHOOL_DENSITY_GOLD.name)
@@ -121,4 +134,5 @@ class DataStore:
             vivabilite_scores=_clean_df(vivabilite_scores),
             transport_scores=_clean_df(transport_scores),
             transport_points=_clean_df(transport_points),
+            iris_geojson=iris_geojson,
         )

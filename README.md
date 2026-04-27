@@ -150,7 +150,42 @@ Server starts at `http://127.0.0.1:8000`.
 | GET | `/population` | Population data per IRIS zone |
 | GET | `/schools` | School list with coordinates |
 | GET | `/indicators/schools` | School accessibility score per IRIS zone |
+| GET | `/map/vivabilite-familiale` | GeoJSON IRIS polygons enriched with family liveability scores |
 | GET | `/stats` | Aggregate statistics |
+
+---
+
+## Running the interactive map
+
+The Next.js frontend lives in `web/` and consumes the FastAPI backend.
+
+```bash
+cd web
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Required frontend environment variables:
+
+```bash
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
+```
+
+If `NEXT_PUBLIC_MAPBOX_TOKEN` is empty, the map falls back to a public
+Mapbox-compatible basemap style. Start the API first with the project venv:
+
+```bash
+.venv/Scripts/uvicorn api.main:app --reload
+```
+
+The vivability choropleth requires the Gold output
+`data/gold/vivabilite_familiale_iris.csv`. Generate it with:
+
+```bash
+python run_pipeline.py --gold
+```
 
 ---
 
