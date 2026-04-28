@@ -10,13 +10,20 @@ themselves.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from typing import Any
 
+import geopandas as gpd
 import pandas as pd
 
 from src.config import (
+    IRIS_GEOJSON,
     POPULATION_SILVER,
+    RENT_PRICE_GOLD,
     SCHOOL_DENSITY_GOLD,
+    SALE_PRICE_GOLD,
     SCHOOLS_SILVER,
+    THERMAL_COMFORT_GOLD,
     TRANSPORT_INDICATOR_GOLD,
     TRANSPORT_POINTS_GOLD,
     VIVABILITE_GOLD,
@@ -48,6 +55,10 @@ class DataStore:
     vivabilite_scores: pd.DataFrame
     transport_scores: pd.DataFrame
     transport_points: pd.DataFrame
+    thermal_comfort_scores: gpd.GeoDataFrame
+    rent_price_scores: gpd.GeoDataFrame
+    sale_price_scores: gpd.GeoDataFrame
+    iris_geojson: dict[str, Any]
 
     # ------------------------------------------------------------------
     # Factory
@@ -66,6 +77,15 @@ class DataStore:
         """
         import logging
         logger = logging.getLogger(__name__)
+
+        if IRIS_GEOJSON.exists():
+            logger.info("Loading geometry: %s", IRIS_GEOJSON.name)
+            with IRIS_GEOJSON.open(encoding="utf-8") as fh:
+                iris_geojson = json.load(fh)
+            logger.info("  → %d IRIS geometries loaded", len(iris_geojson.get("features", [])))
+        else:
+            logger.warning("IRIS GeoJSON not found: %s — run `python run_pipeline.py`", IRIS_GEOJSON)
+            iris_geojson = {"type": "FeatureCollection", "features": []}
 
         if SCHOOL_DENSITY_GOLD.exists():
             logger.info("Loading gold: %s", SCHOOL_DENSITY_GOLD.name)
@@ -114,6 +134,35 @@ class DataStore:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", VIVABILITE_GOLD)
             vivabilite_scores = pd.DataFrame()
 
+        if THERMAL_COMFORT_GOLD.exists():
+            logger.info("Loading gold: %s", THERMAL_COMFORT_GOLD.name)
+            thermal_comfort_scores = gpd.read_parquet(THERMAL_COMFORT_GOLD)
+            thermal_comfort_scores["code_iris"] = (
+                thermal_comfort_scores["code_iris"].astype(str).str.zfill(9)
+            )
+            logger.info("  → %d thermal comfort zones loaded", len(thermal_comfort_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", THERMAL_COMFORT_GOLD)
+            thermal_comfort_scores = gpd.GeoDataFrame()
+
+        if RENT_PRICE_GOLD.exists():
+            logger.info("Loading gold: %s", RENT_PRICE_GOLD.name)
+            rent_price_scores = gpd.read_parquet(RENT_PRICE_GOLD)
+            rent_price_scores["c_ar"] = rent_price_scores["c_ar"].astype(str)
+            logger.info("  → %d rent zones loaded", len(rent_price_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", RENT_PRICE_GOLD)
+            rent_price_scores = gpd.GeoDataFrame()
+
+        if SALE_PRICE_GOLD.exists():
+            logger.info("Loading gold: %s", SALE_PRICE_GOLD.name)
+            sale_price_scores = gpd.read_parquet(SALE_PRICE_GOLD)
+            sale_price_scores["c_ar"] = sale_price_scores["c_ar"].astype(str)
+            logger.info("  → %d sale price rows loaded", len(sale_price_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", SALE_PRICE_GOLD)
+            sale_price_scores = gpd.GeoDataFrame()
+
         return cls(
             iris_scores=_clean_df(iris_scores),
             schools=_clean_df(schools),
@@ -121,4 +170,8 @@ class DataStore:
             vivabilite_scores=_clean_df(vivabilite_scores),
             transport_scores=_clean_df(transport_scores),
             transport_points=_clean_df(transport_points),
+            thermal_comfort_scores=thermal_comfort_scores,
+            rent_price_scores=rent_price_scores,
+            sale_price_scores=sale_price_scores,
+            iris_geojson=iris_geojson,
         )

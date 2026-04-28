@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.config import API_DESCRIPTION, API_TITLE, API_VERSION, CORS_ORIGINS
-from api.routers import iris, population, schools, stats
+from api.routers import iris, map as map_router, population, schools, stats
 from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
         prefix="/indicators/transport",
         tags=["Indicators — Transport"],
     )
+    app.include_router(map_router.router, prefix="/map", tags=["Map Layers"])
     app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
 
     # -----------------------------------------------------------------------
@@ -115,6 +116,11 @@ def create_app() -> FastAPI:
             "iris_zones": len(data.iris_scores),
             "schools": len(data.schools),
             "population_zones": len(data.population),
+            "vivabilite_zones": len(data.vivabilite_scores),
+            "transport_points": len(data.transport_points),
+            "thermal_comfort_zones": len(data.thermal_comfort_scores),
+            "rent_zones": len(data.rent_price_scores),
+            "sale_price_rows": len(data.sale_price_scores),
         }
 
     return app

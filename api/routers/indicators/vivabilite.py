@@ -2,8 +2,7 @@
 
 All routes live under the ``/indicators/vivabilite-familiale`` prefix.
 Each response combines IRIS administrative metadata, census population,
-and the four Gold sub-scores (schools, transport, services, green spaces)
-plus the composite vivabilite_score.
+expanded non-price family sub-scores, and the composite vivabilite_score.
 """
 
 from __future__ import annotations
@@ -29,9 +28,10 @@ router = APIRouter()
     summary="List family liveability scores by IRIS zone",
     description=(
         "Return a paginated list of Paris IRIS zones sorted by vivabilite_rank "
-        "(rank 1 = most family-friendly zone). Each record includes the four "
-        "sub-scores (schools, transport, services, green spaces) and the "
-        "composite 0–10 score. Filter by arrondissement or score range."
+        "(rank 1 = most family-friendly zone). Each record includes expanded "
+        "sub-scores for schools, childcare, safety, healthcare, environment, "
+        "green spaces, transport, and daily services. Filter by arrondissement "
+        "or score range."
     ),
 )
 def list_vivabilite_indicators(
@@ -64,7 +64,7 @@ def list_vivabilite_indicators(
     description=(
         "Return population-weighted liveability statistics for every Paris "
         "arrondissement, sorted alphabetically. Includes averages for all "
-        "four sub-scores and the composite score."
+        "expanded family sub-scores and the composite score."
     ),
 )
 def list_vivabilite_arrondissements(store: DataStoreDep):
@@ -96,7 +96,7 @@ def get_vivabilite_arrondissement(arrondissement: str, store: DataStoreDep):
     summary="Family liveability score for a single IRIS zone",
     description=(
         "Return the full family liveability indicator for one IRIS zone: "
-        "administrative metadata, census population, four sub-scores, "
+        "administrative metadata, census population, expanded sub-scores, "
         "composite score, and Paris-wide rank."
     ),
 )
