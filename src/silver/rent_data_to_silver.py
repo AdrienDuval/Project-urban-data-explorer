@@ -36,7 +36,7 @@ def process_rent_data_to_silver():
     mapping_pd = mapping.copy()
 
 
-    mapping_zone = pd.read_excel(MAPPING_ZONES_XLSX)
+    mapping_zone = pd.read_excel(MAPPING_ZONES_XLSX, engine="xlrd")
 
     #Jointure entre le mapping spatial et le mapping de correspondance des zones pour récupérer les codes de quartiers associés à chaque zone de calcul
     mapping_pd = mapping_pd.merge(mapping_zone, left_on="VAR5", right_on="var5", how="inner")

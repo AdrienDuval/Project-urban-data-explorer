@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+import geopandas as gpd
 import pandas as pd
 
 from api.services.data_loader import DataStore
@@ -29,6 +30,61 @@ def _clean_value(value: Any) -> Any:
         return value.item()
 
     return value
+
+
+def _arrondissement_label(code: Any) -> str | None:
+    """Return a Paris arrondissement label from a 1-20 code."""
+    if code is None:
+        return None
+
+    try:
+        arrondissement = int(str(code)[-2:])
+    except ValueError:
+        return None
+
+    suffix = "er" if arrondissement == 1 else "e"
+    return f"Paris {arrondissement}{suffix} Arrondissement"
+
+
+def _normalise_0_10(series: pd.Series, *, higher_is_better: bool = True) -> pd.Series:
+    values = pd.to_numeric(series, errors="coerce")
+    mn, mx = values.min(), values.max()
+    if pd.isna(mn) or pd.isna(mx):
+        return pd.Series([None] * len(series), index=series.index)
+    if mx == mn:
+        return pd.Series(5.0, index=series.index)
+
+    scaled = (values - mn) / (mx - mn) * 10
+    if not higher_is_better:
+        scaled = 10 - scaled
+    return scaled.round(2)
+
+
+def _geojson_from_gdf(gdf: gpd.GeoDataFrame, *, required_score: str) -> dict[str, Any]:
+    if gdf.empty:
+        raise MapDataUnavailableError("The requested map layer has no loaded rows.")
+
+    if required_score not in gdf.columns:
+        raise MapDataUnavailableError(f"The requested map layer is missing `{required_score}`.")
+
+    features: list[dict[str, Any]] = []
+    for feature in gdf.iterfeatures(na="null"):
+        properties = {
+            key: _clean_value(value)
+            for key, value in (feature.get("properties") or {}).items()
+        }
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": feature.get("geometry"),
+                "properties": properties,
+            }
+        )
+
+    if not features:
+        raise MapDataUnavailableError("No geometries are available for the requested layer.")
+
+    return {"type": "FeatureCollection", "features": features}
 
 
 def _score_lookup(store: DataStore) -> dict[str, dict[str, Any]]:
@@ -90,3 +146,105 @@ def build_vivabilite_geojson(store: DataStore) -> dict[str, Any]:
         )
 
     return {"type": "FeatureCollection", "features": joined_features}
+
+
+def build_thermal_comfort_geojson(store: DataStore) -> dict[str, Any]:
+    """Return IRIS polygons with the thermal comfort composite and sub-metrics."""
+    gdf = store.thermal_comfort_scores.copy()
+    if gdf.empty:
+        raise MapDataUnavailableError(
+            "Thermal comfort scores are not loaded. Run `python run_pipeline.py --gold` "
+            "before requesting this map layer."
+        )
+
+    gdf["thermal_score"] = (pd.to_numeric(gdf["indice_confort_thermique"], errors="coerce") / 10).round(2)
+    gdf["tree_density_score"] = _normalise_0_10(gdf["densite_arbres"])
+    gdf["cooling_area_score"] = _normalise_0_10(gdf["ratio_fraicheur"])
+    gdf["map_id"] = gdf["code_iris"].astype(str).str.zfill(9)
+    gdf["code_iris"] = gdf["map_id"]
+    gdf["name"] = gdf["nom_iris"]
+    gdf["arrondissement"] = gdf["code_iris"].str.slice(3, 5).map(_arrondissement_label)
+    gdf["geography"] = "iris"
+
+    keep_cols = [
+        "map_id",
+        "geography",
+        "code_iris",
+        "name",
+        "arrondissement",
+        "thermal_score",
+        "tree_density_score",
+        "cooling_area_score",
+        "indice_confort_thermique",
+        "densite_arbres",
+        "ratio_fraicheur",
+        "geometry",
+    ]
+    return _geojson_from_gdf(gdf[keep_cols], required_score="thermal_score")
+
+
+def build_rent_geojson(store: DataStore) -> dict[str, Any]:
+    """Return arrondissement polygons with median rent and affordability scores."""
+    gdf = store.rent_price_scores.copy()
+    if gdf.empty:
+        raise MapDataUnavailableError(
+            "Rent scores are not loaded. Run `python run_pipeline.py --gold` "
+            "before requesting this map layer."
+        )
+
+    gdf["rent_score"] = _normalise_0_10(gdf["loyer_median_m2"], higher_is_better=False)
+    gdf["map_id"] = "rent-" + gdf["c_ar"].astype(str)
+    gdf["code_arrondissement"] = gdf["c_ar"].astype(str)
+    gdf["name"] = gdf["l_aroff"].fillna(gdf["l_ar"])
+    gdf["arrondissement"] = gdf["code_arrondissement"].map(_arrondissement_label)
+    gdf["geography"] = "arrondissement"
+
+    keep_cols = [
+        "map_id",
+        "geography",
+        "code_arrondissement",
+        "name",
+        "arrondissement",
+        "rent_score",
+        "loyer_median_m2",
+        "loyer_q1_m2",
+        "loyer_q3_m2",
+        "geometry",
+    ]
+    return _geojson_from_gdf(gdf[keep_cols], required_score="rent_score")
+
+
+def build_sale_geojson(store: DataStore) -> dict[str, Any]:
+    """Return latest arrondissement sale-price polygons and affordability scores."""
+    gdf = store.sale_price_scores.copy()
+    if gdf.empty:
+        raise MapDataUnavailableError(
+            "Sale price scores are not loaded. Run `python run_pipeline.py --gold` "
+            "before requesting this map layer."
+        )
+
+    if "date_periode" in gdf.columns:
+        gdf["date_periode"] = pd.to_datetime(gdf["date_periode"], errors="coerce")
+        gdf = gdf.sort_values("date_periode").drop_duplicates("c_ar", keep="last")
+
+    gdf["sale_score"] = _normalise_0_10(gdf["prix_m2"], higher_is_better=False)
+    gdf["map_id"] = "sale-" + gdf["c_ar"].astype(str)
+    gdf["code_arrondissement"] = gdf["c_ar"].astype(str)
+    gdf["name"] = gdf["l_aroff"].fillna(gdf["l_ar"])
+    gdf["arrondissement"] = gdf["code_arrondissement"].map(_arrondissement_label)
+    gdf["geography"] = "arrondissement"
+    gdf["date_periode"] = gdf["date_periode"].dt.strftime("%Y-%m-%d")
+
+    keep_cols = [
+        "map_id",
+        "geography",
+        "code_arrondissement",
+        "name",
+        "arrondissement",
+        "sale_score",
+        "prix_m2",
+        "Trimestre",
+        "date_periode",
+        "geometry",
+    ]
+    return _geojson_from_gdf(gdf[keep_cols], required_score="sale_score")

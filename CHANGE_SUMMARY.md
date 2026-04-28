@@ -14,6 +14,59 @@ The map is built with:
 - Tailwind CSS for responsive styling.
 - Mapbox GL through `react-map-gl` for the interactive map.
 
+## Current Refinement: Main Indicators + Sub-Indicators
+
+The dashboard now follows a two-level indicator model:
+
+- **Main indicators**: `Vivabilité familiale`, `Transport`, `Confort thermique`, and `Logement`.
+- **Sub-indicators**: the measurable pieces inside each main indicator.
+
+This replaces the earlier flat UI where `Family mix`, `Schools`, `Transport`, and other pillars appeared at the same level.
+
+### Current Main Indicator Model
+
+| Main indicator | Geography | Main score | Sub-indicators / fields |
+| --- | --- | --- | --- |
+| `Vivabilité familiale` | IRIS | `vivabilite_score` | `school_score`, `childcare_score`, `safety_score`, `healthcare_score`, `environment_score`, `green_spaces_score`, `transport_score`, `daily_services_score`, plus custom `Family mix` weights |
+| `Transport` | IRIS + point overlay | `transport_score` | Transport accessibility choropleth plus filters for métro, rail/RER, tram, bus, and Vélib points |
+| `Confort thermique` | IRIS | `thermal_score` | `tree_density_score`, `cooling_area_score`, plus raw `densite_arbres` and `ratio_fraicheur` |
+| `Logement` | Arrondissement | affordability score | `rent_score` from median rent €/m² and `sale_score` from latest median sale price €/m² |
+
+### New Backend Map Routes
+
+The map API now exposes multiple map-ready GeoJSON layers:
+
+```http
+GET /map/vivabilite-familiale
+GET /map/thermal-comfort
+GET /map/housing/rent
+GET /map/housing/sale
+```
+
+`/map/vivabilite-familiale`, `/map/thermal-comfort`, and `/map/transport`-related scoring are IRIS-level. Housing layers are arrondissement-level because the current rent and sale Gold outputs are aggregated to arrondissement polygons.
+
+### New Gold Data Loaded By The API
+
+The API `DataStore` now loads:
+
+- `data/gold/vivabilite_familiale_iris.csv`
+- `data/gold/transport_indicator_iris.csv`
+- `data/gold/transport_points.csv`
+- `data/gold/urban_comfort_index.parquet`
+- `data/gold/rent_data_par_arrdt.parquet`
+- `data/gold/sale_price_median.parquet`
+
+The frontend fetches the new layers lazily when a user selects the relevant main indicator.
+
+### Dependency Notes
+
+The pipeline now needs these dependencies in addition to the original stack:
+
+- `xlrd` for legacy `.xls` rent-zone mapping files.
+- `pdfplumber` for sale-price PDF extraction.
+- `pyarrow` for Parquet Gold outputs.
+- `pytest` and `httpx` for map endpoint tests.
+
 ## Backend Changes
 
 ### GeoJSON Data Loading
