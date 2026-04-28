@@ -58,6 +58,9 @@ def _row_to_indicator(row: pd.Series) -> VivabiliteIndicator:
         total_green_m2=_val("total_green_m2"),
         green_m2_per_resident=_val("green_m2_per_resident"),
         green_spaces_score=_val("green_spaces_score"),
+        essential_connectivity_score=_val("essential_connectivity_score"),
+        essential_connectivity_rank=_int("essential_connectivity_rank"),
+        essential_connectivity_weights=_val("essential_connectivity_weights"),
         vivabilite_score=_val("vivabilite_score"),
         vivabilite_rank=int(row["vivabilite_rank"]) if _val("vivabilite_rank") is not None else None,
         vivabilite_model=_val("vivabilite_model"),
@@ -128,6 +131,7 @@ def list_vivabilite_arrondissements(
         "transport_score",
         "daily_services_score",
         "green_spaces_score",
+        "essential_connectivity_score",
         "vivabilite_score",
     ]
     for col in score_cols:
@@ -150,6 +154,7 @@ def list_vivabilite_arrondissements(
                 avg_transport_score=round(float(group["transport_score"].mean()), 2),
                 avg_daily_services_score=round(float(group["daily_services_score"].mean()), 2),
                 avg_green_spaces_score=round(float(group["green_spaces_score"].mean()), 2),
+                avg_essential_connectivity_score=round(float(group["essential_connectivity_score"].mean()), 2),
                 avg_vivabilite_score=round(float(group["vivabilite_score"].mean()), 2),
                 best_iris=str(best_row["LIBIRIS"]) if best_row is not None and pd.notna(best_row.get("LIBIRIS")) else None,
             )

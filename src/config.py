@@ -138,3 +138,12 @@ VIVABILITE_WEIGHTS = {
     "transport_score":      0.05,
     "daily_services_score": 0.025,
 }
+
+# ── Essential connectivity & services composite weights ───────────────────────
+# These inputs are already normalised on the same 0–10 scale in Gold, so the
+# composite is a direct weighted sum without an additional normalisation pass.
+ESSENTIAL_CONNECTIVITY_WEIGHTS = {
+    "transport_score":      1 / 3,
+    "healthcare_score":     1 / 3,
+    "daily_services_score": 1 / 3,
+}
