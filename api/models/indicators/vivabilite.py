@@ -23,7 +23,8 @@ class VivabiliteIndicator(BaseModel):
         green_spaces_score  — usable green space per resident (25 %)
 
     All sub-scores and the composite are normalised 0–10 (higher = better).
-    ``vivabilite_rank`` is 1 for the best zone in Paris.
+    ``vivabilite_rank`` and ``essential_connectivity_rank`` are 1 for the best
+    zone in Paris for their respective scores.
     """
 
     code_iris: str = Field(description="9-digit INSEE IRIS code.")
@@ -64,6 +65,19 @@ class VivabiliteIndicator(BaseModel):
     )
 
     # Composite
+    essential_connectivity_score: Optional[float] = Field(
+        None,
+        description=(
+            "Composite essential connectivity and services score (0–10), "
+            "combining transport, healthcare, and daily services."
+        ),
+    )
+    essential_connectivity_rank: Optional[int] = Field(
+        None, description="Rank among all Paris IRIS zones for essential connectivity (1 = best)."
+    )
+    essential_connectivity_weights: Optional[str] = Field(
+        None, description="Serialized essential connectivity score weights."
+    )
     vivabilite_score: Optional[float] = Field(
         None,
         description=(
@@ -92,5 +106,6 @@ class VivabiliteArrondissementStats(BaseModel):
     avg_transport_score: float = Field(description="Mean transport score.")
     avg_daily_services_score: float = Field(description="Mean daily services score.")
     avg_green_spaces_score: float = Field(description="Mean green spaces score.")
+    avg_essential_connectivity_score: float = Field(description="Mean essential connectivity score.")
     avg_vivabilite_score: float = Field(description="Mean composite liveability score.")
     best_iris: Optional[str] = Field(None, description="IRIS zone name with the highest score.")

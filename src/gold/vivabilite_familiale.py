@@ -9,6 +9,9 @@ for each Paris IRIS zone:
 
 Housing price / affordability is intentionally excluded for now.
 
+The Gold table also stores an essential connectivity & services composite,
+combining transport, healthcare, and daily services on their existing 0–10 scale.
+
 A rank (1 = best zone in Paris) is also computed and stored.
 
 Output:
@@ -19,6 +22,7 @@ import pandas as pd
 
 from src.config import (
     DAILY_SERVICES_SCORE_GOLD,
+    ESSENTIAL_CONNECTIVITY_WEIGHTS,
     FAMILY_FACTORS_GOLD,
     GREEN_SPACES_SCORE_GOLD,
     HEALTHCARE_SCORE_GOLD,
@@ -57,6 +61,7 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
             school_score, childcare_score, safety_score, healthcare_score,
             environment_score, green_spaces_score, transport_score,
             daily_services_score,
+            essential_connectivity_score, essential_connectivity_rank,
             vivabilite_score, vivabilite_rank
     """
     print("[vivabilite] Loading sub-scores...")
@@ -152,6 +157,15 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
             print(f"[vivabilite]   {missing} missing values in {col} — filled with median {median:.2f}")
         result[col] = result[col].fillna(median)
 
+    # ── Essential connectivity & services composite ──────────────────────────
+    result["essential_connectivity_score"] = 0.0
+    for col, weight in ESSENTIAL_CONNECTIVITY_WEIGHTS.items():
+        result["essential_connectivity_score"] += result[col] * weight
+    result["essential_connectivity_score"] = result["essential_connectivity_score"].round(2)
+    result["essential_connectivity_weights"] = ";".join(
+        f"{key}:{value}" for key, value in ESSENTIAL_CONNECTIVITY_WEIGHTS.items()
+    )
+
     # ── Composite ─────────────────────────────────────────────────────────────
     result["vivabilite_score"] = 0.0
     for col, weight in VIVABILITE_WEIGHTS.items():
@@ -165,6 +179,9 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
 
     # ── Rank (1 = best) ───────────────────────────────────────────────────────
     result["vivabilite_rank"] = result["vivabilite_score"].rank(
+        ascending=False, method="min"
+    ).astype(int)
+    result["essential_connectivity_rank"] = result["essential_connectivity_score"].rank(
         ascending=False, method="min"
     ).astype(int)
 
