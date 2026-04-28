@@ -118,6 +118,9 @@ def create_app() -> FastAPI:
             "population_zones": len(data.population),
             "vivabilite_zones": len(data.vivabilite_scores),
             "transport_points": len(data.transport_points),
+            "thermal_comfort_zones": len(data.thermal_comfort_scores),
+            "rent_zones": len(data.rent_price_scores),
+            "sale_price_rows": len(data.sale_price_scores),
         }
 
     return app

@@ -11,14 +11,21 @@ import Map, {
   type ViewState,
 } from "react-map-gl/mapbox";
 
-import { fetchTransportPoints, fetchVivabiliteMap } from "@/lib/api";
+import {
+  fetchRentMap,
+  fetchSaleMap,
+  fetchThermalComfortMap,
+  fetchTransportPoints,
+  fetchVivabiliteMap,
+} from "@/lib/api";
 import type {
+  IndicatorMapFeatureCollection,
+  IndicatorMapProperties,
   TransportPoint,
   TransportPointFeatureCollection,
   TransportPointProperties,
   TransportType,
   VivabiliteFeatureCollection,
-  VivabiliteProperties,
 } from "@/types/map";
 
 type WeightKey =
@@ -31,11 +38,23 @@ type WeightKey =
   | "daily_services_score"
   | "green_spaces_score";
 
-type MetricKey = "family_mix" | WeightKey;
+type MainIndicator = "vivabilite" | "transport" | "thermal" | "housing";
+
+type MetricKey =
+  | "vivabilite_score"
+  | "essential_connectivity_score"
+  | "family_mix"
+  | WeightKey
+  | "thermal_score"
+  | "tree_density_score"
+  | "cooling_area_score"
+  | "rent_score"
+  | "sale_score";
 
 type Weights = Record<WeightKey, number>;
 
-type ComputedProperties = VivabiliteProperties & {
+type ComputedProperties = IndicatorMapProperties & {
+  map_id: string;
   weighted_score: number | null;
   weighted_rank: number | null;
   score_delta: number | null;
@@ -184,57 +203,110 @@ const transportTypes: Array<{
   { type: "velib", label: "Vélib", icon: "V", color: "#86bd24" },
 ];
 
-const metricOptions: Array<{
-  key: MetricKey;
+const mainIndicatorOptions: Array<{
+  key: MainIndicator;
   label: string;
   description: string;
 }> = [
   {
-    key: "family_mix",
-    label: "Family mix",
-    description: "Custom composite using your weights.",
+    key: "vivabilite",
+    label: "Vivabilité familiale",
+    description: "Composite family suitability score and its pillars.",
   },
   {
-    key: "school_score",
-    label: "Schools",
-    description: "School accessibility only.",
-  },
-  {
-    key: "childcare_score",
-    label: "Childcare",
-    description: "Early childhood access (flat 5/10 baseline for all zones).",
-  },
-  {
-    key: "safety_score",
-    label: "Safety",
-    description: "Neighbourhood safety (flat 5/10 baseline for all zones).",
-  },
-  {
-    key: "healthcare_score",
-    label: "Healthcare",
-    description: "Hospitals, pharmacies, and medical services.",
-  },
-  {
-    key: "environment_score",
-    label: "Environment",
-    description: "Environmental quality (flat 5/10 baseline for all zones).",
-  },
-  {
-    key: "transport_score",
+    key: "transport",
     label: "Transport",
-    description: "Public transport and Velib access.",
+    description: "Public transport accessibility and stop overlays.",
   },
   {
-    key: "daily_services_score",
-    label: "Daily services",
-    description: "Food, post, banks, culture, sport, and everyday amenities.",
+    key: "thermal",
+    label: "Confort thermique",
+    description: "Tree density and cooling-area comfort by IRIS.",
   },
   {
-    key: "green_spaces_score",
-    label: "Green spaces",
-    description: "Accessible green space per resident.",
+    key: "housing",
+    label: "Logement",
+    description: "Rent and sale affordability at arrondissement level.",
   },
 ];
+
+const subMetricOptions: Record<
+  MainIndicator,
+  Array<{
+    key: MetricKey;
+    label: string;
+    description: string;
+  }>
+> = {
+  vivabilite: [
+    {
+      key: "vivabilite_score",
+      label: "Official score",
+      description: "Default composite from the pipeline weights.",
+    },
+    {
+      key: "essential_connectivity_score",
+      label: "Essential connectivity & services",
+      description: "Composite of transport, healthcare, and daily services access.",
+    },
+    {
+      key: "family_mix",
+      label: "Family mix",
+      description: "Custom composite using your weights.",
+    },
+    ...pillarMeta.map((pillar) => ({
+      key: pillar.key,
+      label: pillar.label,
+      description: pillar.description,
+    })),
+  ],
+  transport: [
+    {
+      key: "transport_score",
+      label: "Accessibility score",
+      description: "Weighted métro, rail, tram, bus, and Vélib access.",
+    },
+  ],
+  thermal: [
+    {
+      key: "thermal_score",
+      label: "Thermal comfort",
+      description: "Composite comfort score from trees and cooling areas.",
+    },
+    {
+      key: "tree_density_score",
+      label: "Tree density",
+      description: "Tree density score by IRIS.",
+    },
+    {
+      key: "cooling_area_score",
+      label: "Cooling areas",
+      description: "Share of cool green areas by IRIS.",
+    },
+  ],
+  housing: [
+    {
+      key: "rent_score",
+      label: "Rent affordability",
+      description: "Median rent €/m², inverted so higher means more affordable.",
+    },
+    {
+      key: "sale_score",
+      label: "Sale affordability",
+      description: "Median sale €/m², inverted so higher means more affordable.",
+    },
+  ],
+};
+
+const metricMeta = Object.values(subMetricOptions)
+  .flat()
+  .reduce(
+    (meta, option) => {
+      meta[option.key] = option;
+      return meta;
+    },
+    {} as Record<MetricKey, { label: string; description: string }>,
+  );
 
 const fillLayer: LayerProps = {
   id: "vivabilite-fill",
@@ -365,7 +437,7 @@ function effectiveWeight(weights: Weights, key: WeightKey) {
   return total > 0 ? weights[key] / total : 0;
 }
 
-function calculateWeightedScore(properties: VivabiliteProperties, weights: Weights) {
+function calculateWeightedScore(properties: IndicatorMapProperties, weights: Weights) {
   let weightedSum = 0;
   let availableWeight = 0;
 
@@ -387,7 +459,7 @@ function calculateWeightedScore(properties: VivabiliteProperties, weights: Weigh
 }
 
 function scoreForMetric(
-  properties: VivabiliteProperties,
+  properties: IndicatorMapProperties,
   weightedScore: number | null,
   metric: MetricKey,
 ) {
@@ -395,8 +467,18 @@ function scoreForMetric(
     return weightedScore;
   }
 
-  const value = properties[metric];
+  const value = properties[metric as keyof IndicatorMapProperties];
   return typeof value === "number" ? value : null;
+}
+
+function mapFeatureId(properties: IndicatorMapProperties) {
+  return (
+    properties.map_id ??
+    properties.code_iris ??
+    properties.code_arrondissement ??
+    properties.name ??
+    ""
+  ).toString();
 }
 
 function getTransportMeta(type: string) {
@@ -439,7 +521,7 @@ function getTransportProperties(event: InteractiveMapEvent) {
 }
 
 function buildComputedGeojson(
-  data: VivabiliteFeatureCollection | null,
+  data: IndicatorMapFeatureCollection | VivabiliteFeatureCollection | null,
   weights: Weights,
   metric: MetricKey,
 ): ComputedFeatureCollection | null {
@@ -455,6 +537,7 @@ function buildComputedGeojson(
       ...feature,
       properties: {
         ...feature.properties,
+        map_id: mapFeatureId(feature.properties),
         weighted_score: weightedScore,
         weighted_rank: null,
         score_delta:
@@ -497,6 +580,55 @@ function buildComputedGeojson(
       (((activeRanked.length - index) / activeRanked.length) * 100).toFixed(0),
     );
   });
+
+  return { type: "FeatureCollection", features };
+}
+
+function filterComputedGeojson(
+  data: ComputedFeatureCollection | null,
+  query: string,
+  arrondissementFilter: string,
+  minScore: number,
+): ComputedFeatureCollection | null {
+  if (!data) {
+    return null;
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const features = data.features
+    .filter((feature) => {
+      const properties = feature.properties;
+      const searchText = [
+        properties.name,
+        properties.arrondissement,
+        properties.code_iris,
+        properties.code_arrondissement,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        (!normalizedQuery || searchText.includes(normalizedQuery)) &&
+        (!arrondissementFilter || properties.arrondissement === arrondissementFilter) &&
+        (typeof properties.active_score !== "number" || properties.active_score >= minScore)
+      );
+    })
+    .sort(
+      (a, b) =>
+        (b.properties.active_score ?? -1) - (a.properties.active_score ?? -1),
+    )
+    .map((feature, index, all) => ({
+      ...feature,
+      properties: {
+        ...feature.properties,
+        active_rank: typeof feature.properties.active_score === "number" ? index + 1 : null,
+        active_percentile:
+          typeof feature.properties.active_score === "number"
+            ? Number((((all.length - index) / all.length) * 100).toFixed(0))
+            : null,
+      },
+    }));
 
   return { type: "FeatureCollection", features };
 }
@@ -544,22 +676,45 @@ function Sidebar({
   featureCount,
   averageScore,
   schoolShare,
-  selectedMetric,
+  mainIndicator,
+  selectedSubMetric,
   transportTypeCounts,
   visibleTransportTypes,
-  onMetricChange,
+  arrondissementOptions,
+  arrondissementFilter,
+  minScore,
+  query,
+  ranking,
+  onMainIndicatorChange,
+  onSubMetricChange,
+  onArrondissementFilterChange,
+  onMinScoreChange,
+  onQueryChange,
+  onRankingSelect,
   onTransportTypeToggle,
 }: {
   featureCount: number;
   averageScore: number | null;
   schoolShare: number;
-  selectedMetric: MetricKey;
+  mainIndicator: MainIndicator;
+  selectedSubMetric: MetricKey;
   transportTypeCounts: Record<TransportType, number>;
   visibleTransportTypes: Record<TransportType, boolean>;
-  onMetricChange: (metric: MetricKey) => void;
+  arrondissementOptions: string[];
+  arrondissementFilter: string;
+  minScore: number;
+  query: string;
+  ranking: ComputedFeature[];
+  onMainIndicatorChange: (indicator: MainIndicator) => void;
+  onSubMetricChange: (metric: MetricKey) => void;
+  onArrondissementFilterChange: (arrondissement: string) => void;
+  onMinScoreChange: (score: number) => void;
+  onQueryChange: (query: string) => void;
+  onRankingSelect: (id: string) => void;
   onTransportTypeToggle: (type: TransportType) => void;
 }) {
-  const showTransportFilters = selectedMetric === "transport_score";
+  const showTransportFilters = mainIndicator === "transport";
+  const subMetrics = subMetricOptions[mainIndicator];
 
   return (
     <aside className="pointer-events-auto flex max-h-[190px] shrink-0 flex-col overflow-y-auto border-white/70 bg-white/88 shadow-[18px_0_70px_rgba(15,23,42,0.14)] ring-1 ring-slate-900/5 backdrop-blur-2xl md:h-screen md:max-h-screen md:w-72 md:border-r">
@@ -579,10 +734,10 @@ function Sidebar({
 
       <div className="space-y-2 px-4 pb-2 pt-4">
         <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Map indices
+          Main indicators
         </p>
-        {metricOptions.map((metric) => {
-          const active = selectedMetric === metric.key;
+        {mainIndicatorOptions.map((indicator) => {
+          const active = mainIndicator === indicator.key;
 
           return (
             <button
@@ -591,16 +746,43 @@ function Sidebar({
                   ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
                   : "bg-white/55 text-slate-600 hover:bg-slate-100"
               }`}
-              key={metric.key}
-              onClick={() => onMetricChange(metric.key)}
+              key={indicator.key}
+              onClick={() => onMainIndicatorChange(indicator.key)}
               type="button"
             >
-              <span className="block text-sm font-bold">{metric.label}</span>
+              <span className="block text-sm font-bold">{indicator.label}</span>
               <span
                 className={`mt-0.5 block text-xs ${
                   active ? "text-emerald-50" : "text-slate-400"
                 }`}
               >
+                {indicator.description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="space-y-2 px-4 pb-4">
+        <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+          Sub-indicators
+        </p>
+        {subMetrics.map((metric) => {
+          const active = selectedSubMetric === metric.key;
+
+          return (
+            <button
+              className={`w-full rounded-2xl px-3 py-2.5 text-left transition ${
+                active
+                  ? "bg-slate-950 text-white shadow-lg shadow-slate-950/20"
+                  : "bg-white/55 text-slate-600 hover:bg-slate-100"
+              }`}
+              key={metric.key}
+              onClick={() => onSubMetricChange(metric.key)}
+              type="button"
+            >
+              <span className="block text-sm font-bold">{metric.label}</span>
+              <span className={`mt-0.5 block text-xs ${active ? "text-slate-200" : "text-slate-400"}`}>
                 {metric.description}
               </span>
             </button>
@@ -648,6 +830,75 @@ function Sidebar({
         </div>
       ) : null}
 
+      <div className="space-y-3 border-t border-slate-200/70 px-4 py-4">
+        <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+          Search & filters
+        </p>
+        <input
+          className="w-full rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400"
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Search IRIS, arrondissement..."
+          type="search"
+          value={query}
+        />
+        <select
+          className="w-full rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400"
+          onChange={(event) => onArrondissementFilterChange(event.target.value)}
+          value={arrondissementFilter}
+        >
+          <option value="">All arrondissements</option>
+          {arrondissementOptions.map((arrondissement) => (
+            <option key={arrondissement} value={arrondissement}>
+              {arrondissement}
+            </option>
+          ))}
+        </select>
+        <label className="block rounded-2xl bg-white/55 p-3 text-xs font-semibold text-slate-500">
+          Minimum score: {minScore.toFixed(1)}/10
+          <input
+            className="mt-2 w-full accent-emerald-600"
+            max={10}
+            min={0}
+            onChange={(event) => onMinScoreChange(Number(event.target.value))}
+            step={0.5}
+            type="range"
+            value={minScore}
+          />
+        </label>
+      </div>
+
+      <div className="space-y-2 px-4 pb-4">
+        <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+          Top matches
+        </p>
+        {ranking.length > 0 ? (
+          ranking.map((feature) => (
+            <button
+              className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/55 px-3 py-2 text-left transition hover:bg-white"
+              key={feature.properties.map_id}
+              onClick={() => onRankingSelect(feature.properties.map_id)}
+              type="button"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-bold text-slate-900">
+                  #{feature.properties.active_rank} {feature.properties.name}
+                </span>
+                <span className="block truncate text-xs text-slate-400">
+                  {feature.properties.arrondissement}
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-bold text-emerald-700">
+                {formatScore(feature.properties.active_score)}
+              </span>
+            </button>
+          ))
+        ) : (
+          <p className="rounded-2xl bg-white/55 px-3 py-3 text-sm text-slate-500">
+            No matching zones.
+          </p>
+        )}
+      </div>
+
       <div className="grid grid-cols-3 gap-2 border-t border-slate-200/70 p-4 md:mt-auto md:block md:space-y-2">
         <Metric label="Zones" value={formatNumber(featureCount)} />
         <Metric label="Avg" value={formatScore(averageScore)} />
@@ -657,7 +908,7 @@ function Sidebar({
   );
 }
 
-function Legend() {
+function Legend({ label = "Score" }: { label?: string }) {
   const stops = [
     { label: "0", color: "#f43f5e" },
     { label: "2", color: "#fb923c" },
@@ -670,7 +921,7 @@ function Legend() {
   return (
     <GlassCard className="rounded-[1.6rem] p-4">
       <div className="mb-3 flex items-center justify-between gap-4">
-        <p className="text-sm font-semibold text-slate-950">Liveability score</p>
+        <p className="text-sm font-semibold text-slate-950">{label}</p>
         <p className="text-xs font-medium text-slate-500">low to high</p>
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-linear-to-r from-rose-500 via-amber-300 to-emerald-700" />
@@ -773,10 +1024,10 @@ function WeightPanel({
           Current top 3
         </p>
         <div className="mt-3 space-y-3">
-          {topFeatures.map((feature) => (
+          {topFeatures.slice(0, 3).map((feature) => (
             <div
               className="flex items-center justify-between gap-3"
-              key={feature.properties.code_iris}
+              key={feature.properties.map_id}
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">
@@ -854,6 +1105,7 @@ function DetailsPanel({
   averageScore,
   featureCount,
   weights,
+  mainIndicator,
   selectedMetric,
   onClose,
 }: {
@@ -862,19 +1114,20 @@ function DetailsPanel({
   averageScore: number | null;
   featureCount: number;
   weights: Weights;
+  mainIndicator: MainIndicator;
   selectedMetric: MetricKey;
   onClose: () => void;
 }) {
   const feature = selected ?? topFeature?.properties ?? null;
-  const metricLabel =
-    metricOptions.find((metric) => metric.key === selectedMetric)?.label ?? "Score";
-  const bestPillar = feature
+  const metricLabel = metricMeta[selectedMetric]?.label ?? "Score";
+  const isVivabilite = mainIndicator === "vivabilite";
+  const bestPillar = feature && isVivabilite
     ? pillarMeta
         .map((pillar) => ({ ...pillar, value: feature[pillar.key] }))
         .filter((pillar) => typeof pillar.value === "number")
         .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))[0]
     : null;
-  const weakestPillar = feature
+  const weakestPillar = feature && isVivabilite
     ? pillarMeta
         .map((pillar) => ({ ...pillar, value: feature[pillar.key] }))
         .filter((pillar) => typeof pillar.value === "number")
@@ -886,10 +1139,10 @@ function DetailsPanel({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
-            {selected ? "Selected IRIS" : "Best current match"}
+            {selected ? "Selected area" : "Best current match"}
           </p>
           <h2 className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-950">
-            {feature?.name ?? "Family liveability"}
+            {feature?.name ?? metricLabel}
           </h2>
           <p className="mt-1 text-sm text-slate-500">
             {feature?.arrondissement ?? `${featureCount} mapped IRIS zones`}
@@ -921,8 +1174,8 @@ function DetailsPanel({
 
       <div className="mt-3 grid grid-cols-3 gap-3">
         <Metric
-          label="Original"
-          value={formatScore(feature?.vivabilite_score)}
+          label={isVivabilite ? "Original" : "Avg"}
+          value={formatScore(isVivabilite ? feature?.vivabilite_score : averageScore)}
         />
         <Metric
           label="Delta"
@@ -944,17 +1197,47 @@ function DetailsPanel({
 
       <div className="mt-4 rounded-[1.4rem] border border-slate-200/80 bg-white/55 p-4">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500">Population</span>
+          <span className="text-slate-500">
+            {feature?.geography === "arrondissement" ? "Level" : "Population"}
+          </span>
           <span className="font-semibold text-slate-950">
-            {formatNumber(feature?.population)}
+            {feature?.geography === "arrondissement"
+              ? "Arrondissement"
+              : formatNumber(feature?.population)}
           </span>
         </div>
         <div className="mt-3 flex items-center justify-between text-sm">
-          <span className="text-slate-500">IRIS code</span>
+          <span className="text-slate-500">
+            {feature?.geography === "arrondissement" ? "Arrondissement code" : "IRIS code"}
+          </span>
           <span className="font-mono text-xs font-semibold text-slate-950">
-            {feature?.code_iris ?? "N/A"}
+            {feature?.code_iris ?? feature?.code_arrondissement ?? "N/A"}
           </span>
         </div>
+        {typeof feature?.loyer_median_m2 === "number" ? (
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span className="text-slate-500">Median rent</span>
+            <span className="font-semibold text-slate-950">
+              {feature.loyer_median_m2.toFixed(1)} €/m²
+            </span>
+          </div>
+        ) : null}
+        {typeof feature?.prix_m2 === "number" ? (
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span className="text-slate-500">Median sale price</span>
+            <span className="font-semibold text-slate-950">
+              {formatNumber(feature.prix_m2)} €/m²
+            </span>
+          </div>
+        ) : null}
+        {typeof feature?.densite_arbres === "number" ? (
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span className="text-slate-500">Tree density</span>
+            <span className="font-semibold text-slate-950">
+              {feature.densite_arbres.toFixed(1)} trees/ha
+            </span>
+          </div>
+        ) : null}
       </div>
 
       {bestPillar && weakestPillar ? (
@@ -974,7 +1257,7 @@ function DetailsPanel({
         </div>
       ) : null}
 
-      {feature ? (
+      {feature && isVivabilite ? (
         <div className="mt-4">
           <ScoreBreakdown
             feature={feature}
@@ -988,13 +1271,23 @@ function DetailsPanel({
 }
 
 export function EnhancedMapDashboard() {
-  const [data, setData] = useState<VivabiliteFeatureCollection | null>(null);
+  const [vivabiliteData, setVivabiliteData] =
+    useState<VivabiliteFeatureCollection | null>(null);
+  const [thermalData, setThermalData] = useState<IndicatorMapFeatureCollection | null>(
+    null,
+  );
+  const [rentData, setRentData] = useState<IndicatorMapFeatureCollection | null>(null);
+  const [saleData, setSaleData] = useState<IndicatorMapFeatureCollection | null>(null);
   const [transportPoints, setTransportPoints] = useState<TransportPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [weights, setWeights] = useState<Weights>(defaultWeights);
-  const [selectedMetric, setSelectedMetric] = useState<MetricKey>("family_mix");
+  const [mainIndicator, setMainIndicator] = useState<MainIndicator>("vivabilite");
+  const [selectedMetric, setSelectedMetric] = useState<MetricKey>("vivabilite_score");
+  const [query, setQuery] = useState("");
+  const [arrondissementFilter, setArrondissementFilter] = useState("");
+  const [minScore, setMinScore] = useState(0);
   const [visibleTransportTypes, setVisibleTransportTypes] = useState<
     Record<TransportType, boolean>
   >({
@@ -1030,7 +1323,7 @@ export function EnhancedMapDashboard() {
         if (!active) {
           return;
         }
-        setData(geojson);
+        setVivabiliteData(geojson);
         setError(null);
       })
       .catch((err: Error) => {
@@ -1049,6 +1342,65 @@ export function EnhancedMapDashboard() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadLayer() {
+      if (
+        (mainIndicator === "vivabilite" && vivabiliteData) ||
+        (mainIndicator === "transport" && vivabiliteData) ||
+        (mainIndicator === "thermal" && thermalData) ||
+        (mainIndicator === "housing" && selectedMetric === "rent_score" && rentData) ||
+        (mainIndicator === "housing" && selectedMetric === "sale_score" && saleData)
+      ) {
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        if (mainIndicator === "thermal") {
+          const geojson = await fetchThermalComfortMap();
+          if (active) {
+            setThermalData(geojson);
+          }
+        } else if (mainIndicator === "housing" && selectedMetric === "rent_score") {
+          const geojson = await fetchRentMap();
+          if (active) {
+            setRentData(geojson);
+          }
+        } else if (mainIndicator === "housing" && selectedMetric === "sale_score") {
+          const geojson = await fetchSaleMap();
+          if (active) {
+            setSaleData(geojson);
+          }
+        } else {
+          const geojson = await fetchVivabiliteMap();
+          if (active) {
+            setVivabiliteData(geojson);
+          }
+        }
+      } catch (err) {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Map layer unavailable");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadLayer();
+
+    return () => {
+      active = false;
+    };
+  }, [mainIndicator, rentData, saleData, selectedMetric, thermalData, vivabiliteData]);
 
   useEffect(() => {
     let active = true;
@@ -1073,9 +1425,23 @@ export function EnhancedMapDashboard() {
     };
   }, []);
 
+  const sourceData = useMemo(() => {
+    if (mainIndicator === "thermal") {
+      return thermalData;
+    }
+    if (mainIndicator === "housing") {
+      return selectedMetric === "sale_score" ? saleData : rentData;
+    }
+    return vivabiliteData;
+  }, [mainIndicator, rentData, saleData, selectedMetric, thermalData, vivabiliteData]);
+
+  const computedData = useMemo(
+    () => buildComputedGeojson(sourceData, weights, selectedMetric),
+    [sourceData, selectedMetric, weights],
+  );
   const displayData = useMemo(
-    () => buildComputedGeojson(data, weights, selectedMetric),
-    [data, selectedMetric, weights],
+    () => filterComputedGeojson(computedData, query, arrondissementFilter, minScore),
+    [arrondissementFilter, computedData, minScore, query],
   );
   const transportData = useMemo(
     () => buildTransportGeojson(transportPoints, visibleTransportTypes),
@@ -1102,23 +1468,36 @@ export function EnhancedMapDashboard() {
     return {
       averageScore,
       topFeature: topFeatures[0] ?? null,
-      topFeatures: topFeatures.slice(0, 3),
+      topFeatures: topFeatures.slice(0, 5),
       featureCount: features.length,
     };
   }, [displayData]);
 
   const selected =
-    displayData?.features.find((feature) => feature.properties.code_iris === selectedCode)
+    displayData?.features.find((feature) => feature.properties.map_id === selectedCode)
       ?.properties ?? null;
   const hovered =
-    displayData?.features.find((feature) => feature.properties.code_iris === hoveredCode)
+    displayData?.features.find((feature) => feature.properties.map_id === hoveredCode)
       ?.properties ?? null;
   const popupFeature = selected ?? hovered;
   const popupPosition = selected ? popup : hoverPopup;
   const activeCode = selectedCode ?? hoveredCode ?? "";
   const schoolShare = Math.round(effectiveWeight(weights, "school_score") * 100);
-  const showTransportMarkers = selectedMetric === "transport_score";
-  const showWeightStudio = selectedMetric === "family_mix";
+  const showTransportMarkers = mainIndicator === "transport";
+  const showWeightStudio = mainIndicator === "vivabilite" && selectedMetric === "family_mix";
+  const metricLabel = metricMeta[selectedMetric]?.label ?? "Score";
+  const mainLabel =
+    mainIndicatorOptions.find((indicator) => indicator.key === mainIndicator)?.label ??
+    "Urban indicator";
+  const arrondissementOptions = useMemo(() => {
+    const arrondissements = new Set<string>();
+    computedData?.features.forEach((feature) => {
+      if (feature.properties.arrondissement) {
+        arrondissements.add(feature.properties.arrondissement);
+      }
+    });
+    return [...arrondissements].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [computedData]);
   const transportTypeCounts = useMemo(
     () =>
       transportTypes.reduce(
@@ -1142,7 +1521,7 @@ export function EnhancedMapDashboard() {
   const activeLayer: LayerProps = {
     id: "vivabilite-active",
     type: "line",
-    filter: ["==", ["get", "code_iris"], activeCode],
+    filter: ["==", ["get", "map_id"], activeCode],
     paint: {
       "line-color": "#020617",
       "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2, 14, 4],
@@ -1161,7 +1540,7 @@ export function EnhancedMapDashboard() {
 
     const properties = getFeatureProperties(event);
     event.target.getCanvas().style.cursor = properties ? "pointer" : "";
-    setHoveredCode(properties?.code_iris ?? null);
+    setHoveredCode(properties?.map_id ?? null);
     setHoverPopup(
       properties
         ? { longitude: event.lngLat.lng, latitude: event.lngLat.lat }
@@ -1201,8 +1580,20 @@ export function EnhancedMapDashboard() {
       return;
     }
 
-    setSelectedCode(properties.code_iris);
+    setSelectedCode(properties.map_id);
     setPopup({ longitude: event.lngLat.lng, latitude: event.lngLat.lat });
+    setSelectedTransportPoint(null);
+    setTransportPopup(null);
+  }
+
+  function changeMainIndicator(indicator: MainIndicator) {
+    setMainIndicator(indicator);
+    setSelectedMetric(subMetricOptions[indicator][0].key);
+    setArrondissementFilter("");
+    setMinScore(0);
+    setQuery("");
+    setSelectedCode(null);
+    setPopup(null);
     setSelectedTransportPoint(null);
     setTransportPopup(null);
   }
@@ -1228,10 +1619,26 @@ export function EnhancedMapDashboard() {
       <div className="absolute inset-x-0 top-0 z-20 md:bottom-0 md:left-0 md:right-auto">
         <Sidebar
           averageScore={stats.averageScore}
+          arrondissementFilter={arrondissementFilter}
+          arrondissementOptions={arrondissementOptions}
           featureCount={stats.featureCount}
-          onMetricChange={changeMetric}
+          mainIndicator={mainIndicator}
+          minScore={minScore}
+          onArrondissementFilterChange={setArrondissementFilter}
+          onMainIndicatorChange={changeMainIndicator}
+          onMinScoreChange={setMinScore}
+          onQueryChange={setQuery}
+          onRankingSelect={(id) => {
+            setSelectedCode(id);
+            setPopup(null);
+            setSelectedTransportPoint(null);
+            setTransportPopup(null);
+          }}
+          onSubMetricChange={changeMetric}
           onTransportTypeToggle={toggleTransportType}
-          selectedMetric={selectedMetric}
+          query={query}
+          ranking={stats.topFeatures}
+          selectedSubMetric={selectedMetric}
           schoolShare={schoolShare}
           transportTypeCounts={transportTypeCounts}
           visibleTransportTypes={visibleTransportTypes}
@@ -1316,7 +1723,8 @@ export function EnhancedMapDashboard() {
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  {popupFeature.arrondissement} · {popupFeature.code_iris}
+                  {popupFeature.arrondissement} ·{" "}
+                  {popupFeature.code_iris ?? popupFeature.code_arrondissement}
                 </p>
               </div>
             </Popup>
@@ -1372,13 +1780,12 @@ export function EnhancedMapDashboard() {
                 Urban Data Explorer
               </span>
               <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-500">
-                {metricOptions.find((metric) => metric.key === selectedMetric)?.label ??
-                  "Paris IRIS map"}
+                {metricLabel}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-end gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-4xl">
-                Family liveability — Paris
+                {mainLabel} — Paris
               </h1>
               <button
                 className="rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-white"
@@ -1390,13 +1797,13 @@ export function EnhancedMapDashboard() {
             </div>
             {showMapIntro ? (
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-                IRIS zones coloured by score. Choose an index in the sidebar, or
-                Family mix to adjust pillar weights. Transport stops (métro, RER,
-                tram, bus, Vélib) come from this project&apos;s data when you select
-                Transport—not from the Mapbox basemap.
+                Choose a main indicator, then inspect its sub-indicators. Vivabilité
+                combines family pillars, Transport adds project stop data, Thermal
+                Comfort maps trees and cooling areas, and Housing shows affordability
+                by arrondissement.
               </p>
             ) : null}
-            {transportError && selectedMetric === "transport_score" ? (
+            {transportError && mainIndicator === "transport" ? (
               <p className="mt-2 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
                 Transport points unavailable: {transportError}
               </p>
@@ -1413,11 +1820,11 @@ export function EnhancedMapDashboard() {
             </button>
             {showLegendPanel ? (
               <div className="pointer-events-auto w-72 max-w-[85vw] md:hidden">
-                <Legend />
+                <Legend label={metricLabel} />
               </div>
             ) : null}
             <div className="pointer-events-auto hidden w-80 md:block">
-              <Legend />
+              <Legend label={metricLabel} />
             </div>
           </div>
         </div>
@@ -1450,6 +1857,7 @@ export function EnhancedMapDashboard() {
             <DetailsPanel
               averageScore={stats.averageScore}
               featureCount={stats.featureCount}
+              mainIndicator={mainIndicator}
               onClose={() => {
                 setSelectedCode(null);
                 setPopup(null);
@@ -1468,7 +1876,7 @@ export function EnhancedMapDashboard() {
           <GlassCard className="rounded-4xl p-6 text-center">
             <p className="text-sm font-semibold text-slate-950">Loading map data</p>
             <p className="mt-2 text-sm text-slate-500">
-              Fetching IRIS polygons and liveability scores...
+              Fetching {mainLabel.toLowerCase()} polygons and scores...
             </p>
           </GlassCard>
         </div>
@@ -1481,7 +1889,7 @@ export function EnhancedMapDashboard() {
               Map data unavailable
             </p>
             <h2 className="mt-2 text-2xl font-bold text-slate-950">
-              Start the API and generate the gold indicator first
+              Start the API and generate the gold indicators first
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">{error}</p>
             <div className="mt-4 rounded-2xl bg-slate-100 p-4 font-mono text-xs text-slate-700">
