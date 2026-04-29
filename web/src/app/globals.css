@@ -32,8 +32,8 @@ input[type="range"] {
 }
 
 .mapboxgl-popup-content {
-  border-radius: 22px;
-  box-shadow: 0 24px 70px rgb(15 23 42 / 22%);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgb(15 23 42 / 12%);
   padding: 0;
 }
 
