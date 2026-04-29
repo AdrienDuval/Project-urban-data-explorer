@@ -10,8 +10,10 @@ import json
 from src.db import engine
 
 def process_rent_data_to_gold():
+    print("[rent data] Loading Silver rent data...")
     # Charger les données de loyers (Silver)
     loyers_complets = pd.read_csv(RENT_PRICE_SILVER, sep=";")
+    print(f"[rent_data]   {len(loyers_complets):,} zones loaded")
 
 
     # Nettoyage des chaînes et conversion en Float
@@ -68,7 +70,7 @@ def process_rent_data_to_gold():
 
     gdf_final.to_parquet(RENT_PRICE_GOLD, engine="pyarrow")
 
-    print("🏆 Gold : rent_data.parquet prêt pour le Dashboard.")
+    print("Gold : rent_data.parquet prêt pour le Dashboard.")
     
     # 6. Insertion en base de données MySQL
     # Convertir la géométrie en WKT (Well-Known Text) pour MySQL
@@ -83,7 +85,7 @@ def process_rent_data_to_gold():
     
     # Insertion dans la table 'rent_data'
     df_sql.to_sql("rent_data", engine, if_exists="replace", index=False)
-    print("💾 Données insérées dans la table MySQL 'rent_data'.")
+    print("Données insérées dans la table MySQL 'rent_data'.")
 
 if __name__ == "__main__":
     process_rent_data_to_gold()

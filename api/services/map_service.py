@@ -255,31 +255,35 @@ def build_thermal_comfort_geojson(store: DataStore) -> dict[str, Any]:
             "before requesting this map layer."
         )
 
-    gdf["thermal_score"] = (pd.to_numeric(gdf["indice_confort_thermique"], errors="coerce") / 10).round(2)
-    gdf["tree_density_score"] = _normalise_0_10(gdf["densite_arbres"])
-    gdf["cooling_area_score"] = _normalise_0_10(gdf["ratio_fraicheur"])
+    # ✅ Utilise directement les scores calculés par le pipeline (0-10)
     gdf["map_id"] = gdf["code_iris"].astype(str).str.zfill(9)
     gdf["code_iris"] = gdf["map_id"]
     gdf["name"] = gdf["nom_iris"]
     gdf["arrondissement"] = gdf["code_iris"].str.slice(3, 5).map(_arrondissement_label)
     gdf["geography"] = "iris"
 
-    keep_cols = [
-        "map_id",
-        "geography",
-        "code_iris",
-        "name",
-        "arrondissement",
-        "thermal_score",
-        "tree_density_score",
-        "cooling_area_score",
-        "indice_confort_thermique",
-        "densite_arbres",
-        "ratio_fraicheur",
-        "geometry",
-    ]
-    return _geojson_from_gdf(gdf[keep_cols], required_score="thermal_score")
+    # Colonnes de score — utilise celles du pipeline, avec fallback
+    gdf["thermal_score"] = pd.to_numeric(
+        gdf.get("thermal_score", gdf.get("indice_confort_thermique")), errors="coerce"
+    ).round(2)
+    gdf["tree_density_score"] = pd.to_numeric(
+        gdf.get("tree_density_score", gdf.get("score_densite_arbres")), errors="coerce"
+    ).round(2)
+    gdf["cooling_area_score"] = pd.to_numeric(
+        gdf.get("cooling_area_score", gdf.get("score_ratio_fraicheur")), errors="coerce"
+    ).round(2)
+    gdf["proximity_score"] = pd.to_numeric(
+        gdf.get("proximity_score"), errors="coerce"
+    ).round(2)
 
+    keep_cols = [
+        "map_id", "geography", "code_iris", "name", "arrondissement",
+        "thermal_score", "tree_density_score", "cooling_area_score",
+        "proximity_score", "densite_arbres", "ratio_fraicheur", "geometry",
+    ]
+    # Garde seulement les colonnes qui existent
+    keep_cols = [c for c in keep_cols if c in gdf.columns]
+    return _geojson_from_gdf(gdf[keep_cols], required_score="thermal_score")
 
 def build_rent_geojson(store: DataStore) -> dict[str, Any]:
     """Return arrondissement polygons with median rent and affordability scores."""

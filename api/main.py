@@ -33,6 +33,7 @@ from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
 from api.services.data_loader import DataStore
+from api.routers.indicators import thermal_comfort
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +104,12 @@ def create_app() -> FastAPI:
         prefix="/analytics/zone-clicks",
         tags=["Analytics — Zone interest"],
     )
+
+    app.include_router(
+        thermal_comfort.router, 
+        prefix="/indicators/thermal-comfort", 
+        tags=["Thermal Comfort"])
+
 
     # -----------------------------------------------------------------------
     # Root / health endpoints
