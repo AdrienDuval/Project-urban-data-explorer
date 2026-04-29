@@ -4,7 +4,10 @@
       "Bash(python3)",
       "Bash(python3 -c ':*)",
       "Bash(venv/Scripts/pip install:*)",
-      "Bash(venv/Scripts/python -c ':*)"
+      "Bash(venv/Scripts/python -c ':*)",
+      "Bash(python -c \"import email_validator; print\\('email-validator ok'\\)\")",
+      "Bash(python -c \"import secrets; print\\(secrets.token_hex\\(32\\)\\)\")",
+      "Bash(python3 -c \"import json; f=json.load\\(open\\('data/bronze/main_data/iris.geojson'\\)\\); print\\(f'Total IRIS features: {len\\(f.get\\(\\\\\"features\\\\\", []\\)\\)}'\\)\")"
     ]
   }
 }

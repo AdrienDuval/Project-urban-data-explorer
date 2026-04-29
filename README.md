@@ -60,8 +60,13 @@ data/
 ├── silver/                 Cleaned CSVs — gitignored, never in DB
 └── gold/                   Indicator CSVs — committed to Git + written to DB
 
+Dockerfile.api              FastAPI image (repo root)
+docker-compose.yml          Local stack: MongoDB, API, Next.js web
+web/Dockerfile              Next.js production image (standalone output)
+
 exploration/                Jupyter notebooks (EDA, prototyping)
 run_pipeline.py             Pipeline entry point
+.github/workflows/        GitHub Actions — scheduled/manual data pipeline runs
 ```
 
 ---
@@ -87,6 +92,45 @@ DB_USER=your_user
 DB_PASSWORD=your_password
 ```
 
+**API extras (optional but needed for auth and Mongo-backed features):** `SECRET_KEY` (JWT signing; use a long random string) and `MONGO_URI` if you use MongoDB outside Docker (e.g. Atlas). When you run **`docker compose`**, the compose file sets `MONGO_URI=mongodb://mongo:27017` for the API container so it talks to the bundled MongoDB service.
+
+---
+
+## Running with Docker
+
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or another Engine install) with Compose v2.
+
+From the **repository root**:
+
+```bash
+docker compose up --build
+```
+
+| Service | URL / port | Notes |
+|--------|------------|--------|
+| Next.js app | [http://localhost:3000](http://localhost:3000) | Built with `NEXT_PUBLIC_API_URL=http://localhost:8000` so the browser calls the API on the host. |
+| FastAPI | [http://localhost:8000/docs](http://localhost:8000/docs) | Loads datasets from `./data` mounted read-only at `/app/data`. |
+| MongoDB | `localhost:27017` | Used for auth users and zone-click analytics; data persists in the `mongo_data` volume. |
+
+**Data:** ensure `data/` exists on the host with the usual Bronze/Silver/Gold outputs (same paths as local runs). The API container does not bake datasets into the image.
+
+**Environment:** compose loads a root `.env` if present (`required: false`). Set **`SECRET_KEY`** there (or export it before `docker compose up`) so login/register and JWT work.
+
+**Deploying elsewhere:** rebuild the web image with your public API URL, for example:
+
+```bash
+docker compose build web --build-arg NEXT_PUBLIC_API_URL=https://api.example.com
+```
+
+**API image only:**
+
+```bash
+docker build -f Dockerfile.api -t ude-api .
+docker run --rm -p 8000:8000 -v "${PWD}/data:/app/data:ro" --env-file .env ude-api
+```
+
+Add `--env-file .env` only if the file exists at the project root.
+
 ---
 
 ## Running the data pipeline
@@ -105,6 +149,25 @@ python run_pipeline.py --gold
 The first full run downloads ~700 MB of raw data from Google Drive into `data/bronze/`.
 Subsequent runs skip the download if Bronze already exists (use `force_update=True` in code to re-download).
 
+### GitHub Actions (CI orchestration)
+
+The workflow [`.github/workflows/data-pipeline.yml`](.github/workflows/data-pipeline.yml) runs `run_pipeline.py` on GitHub-hosted runners (manual trigger by default).
+
+1. **Secrets** — Either:
+
+   **A. Repository secrets** — **Settings → Secrets and variables → Actions → Repository secrets**, same names as below.
+
+   **B. Environment secrets** — **Settings → Environments →** *(your environment)* **→ Environment secrets**. Then edit `data-pipeline.yml`: under `jobs.run-pipeline`, uncomment `environment:` and set it to that environment’s **exact** name (otherwise `${{ secrets.* }}` stay empty).
+
+   | Secret | Notes |
+   |--------|--------|
+   | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Required for **`gold`** and **`full`** (Gold writes to MySQL). |
+   | `MONGO_URI` | Optional; omit if unused. |
+
+2. **Run manually** — **Actions → Data pipeline → Run workflow**. Choose **full**, **silver**, or **gold**.
+
+3. **Caveats** — Full runs download bronze data each time on a fresh runner (~700 MB, long runtime). Prefer **`gold`** only if silver/bronze outputs are produced elsewhere, or raise `timeout-minutes` / add caching later. Uncomment `schedule` in the workflow file only after manual runs are stable.
+
 ### What gets written to the database
 
 The DB is only written during the **Gold step**. Silver stays as local files only.
@@ -120,6 +183,8 @@ Each teammate's Gold indicator will add its own table here (e.g. `dvf_score_iris
 ---
 
 ## Running the API
+
+Alternatively, run the API (and the full stack) with Docker — see **[Running with Docker](#running-with-docker)**.
 
 > **Important:** always use the venv's uvicorn, not a system-wide one.
 > If `uvicorn` resolves to a different Python environment (e.g. miniconda), the wrong packages will load and the API will crash.
@@ -157,7 +222,7 @@ Server starts at `http://127.0.0.1:8000`.
 
 ## Running the interactive map
 
-The Next.js frontend lives in `web/` and consumes the FastAPI backend.
+The Next.js frontend lives in `web/` and consumes the FastAPI backend. For a production-style front end in containers, use **`docker compose`** (see [Running with Docker](#running-with-docker)).
 
 ```bash
 cd web

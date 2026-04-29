@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.config import API_DESCRIPTION, API_TITLE, API_VERSION, CORS_ORIGINS
-from api.routers import iris, map as map_router, population, schools, stats
+from api.routers import auth as auth_router, iris, map as map_router, population, schools, stats, zone_analytics
 from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
@@ -58,13 +58,14 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
 
     # -----------------------------------------------------------------------
     # Routers
     # -----------------------------------------------------------------------
+    app.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
     app.include_router(iris.router, prefix="/iris", tags=["IRIS Zones"])
     app.include_router(population.router, prefix="/population", tags=["Population"])
     app.include_router(schools.router, prefix="/schools", tags=["Schools"])
@@ -85,6 +86,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(map_router.router, prefix="/map", tags=["Map Layers"])
     app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
+    app.include_router(
+        zone_analytics.router,
+        prefix="/analytics/zone-clicks",
+        tags=["Analytics — Zone interest"],
+    )
 
     # -----------------------------------------------------------------------
     # Root / health endpoints
