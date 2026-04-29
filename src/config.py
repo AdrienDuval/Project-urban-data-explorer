@@ -78,7 +78,8 @@ TRANSPORT_VELIB_SILVER  = SILVER / "velib_paris.csv"
 
 # ── Gold outputs ───────────────────────────────────────────────────────────────
 
-
+BDCOM_GOLD      = GOLD / "bdcom.csv"
+DVF_GOLD        = GOLD / "dvf.csv"
 THERMAL_COMFORT_GOLD = GOLD / "urban_comfort_index.parquet"
 SALE_PRICE_GOLD = GOLD / "sale_price_median.parquet"
 RENT_PRICE_GOLD = GOLD / "rent_data_par_arrdt.parquet"

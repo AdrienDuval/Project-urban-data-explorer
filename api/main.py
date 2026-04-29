@@ -18,7 +18,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.config import API_DESCRIPTION, API_TITLE, API_VERSION, CORS_ORIGINS
-from api.routers import auth as auth_router, iris, map as map_router, population, schools, stats, zone_analytics
+from api.routers import (
+    auth as auth_router,
+    bdcom,
+    dvf,
+    iris,
+    map as map_router,
+    population,
+    schools,
+    stats,
+    zone_analytics,
+)
 from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
@@ -86,6 +96,8 @@ def create_app() -> FastAPI:
     )
     app.include_router(map_router.router, prefix="/map", tags=["Map Layers"])
     app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
+    app.include_router(bdcom.router, prefix="/bdcom", tags=["BDCom"])
+    app.include_router(dvf.router, prefix="/dvf", tags=["DVF"])
     app.include_router(
         zone_analytics.router,
         prefix="/analytics/zone-clicks",
