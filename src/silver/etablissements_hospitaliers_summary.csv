@@ -1,0 +1,15 @@
+﻿Metric,Value
+Total Healthcare Facilities,"1,223"
+Total Features/Columns,40
+Numeric Features,17
+Categorical Features,20
+Departments Covered,8
+Establishment Categories,22
+Establishment Types,11
+Facilities with Coordinates,"1,223"
+Public Service Participants,835
+Oldest Facility Opening,1884-04-01 00:00:00
+Newest Facility Opening,2012-11-19 00:00:00
+Total Missing Values,"1,965"
+Data Completeness,95.98%
+Memory Usage (MB),1.88
