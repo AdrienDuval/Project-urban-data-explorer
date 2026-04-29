@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from api.config import API_DESCRIPTION, API_TITLE, API_VERSION, CORS_ORIGINS
-from api.routers import iris, map as map_router, population, schools, stats
+from api.routers import iris, map as map_router, population, schools, stats, bdcom, dvf
 from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
@@ -85,6 +85,8 @@ def create_app() -> FastAPI:
     )
     app.include_router(map_router.router, prefix="/map", tags=["Map Layers"])
     app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
+    app.include_router(bdcom.router, prefix="/bdcom", tags=["BDCom"])
+    app.include_router(dvf.router, prefix="/dvf", tags=["DVF"])
 
     # -----------------------------------------------------------------------
     # Root / health endpoints
