@@ -1,29 +1,54 @@
+# -----------------------------------------------------------------------------
+# Urban data explorer — Python dependencies
+# Install: pip install -r requirements.txt
+# -----------------------------------------------------------------------------
+
+scikit-learn
+numpy
 # six: required by python-dateutil (pandas); pin recent version — very old six
 # (e.g. 1.11) can break `from six.moves import _thread` on modern Python.
 six>=1.16.0
+
+# Numerics & tabular data (numpy: used directly in src/gold/transport_score.py, src/transport_score.py)
+numpy>=2.0
 pandas>=2.0
 openpyxl>=3.1
-# .xls (Excel 97–2003): pandas needs xlrd ≥2.0.1 (e.g. rent mapping table_zones *.xls).
+# Excel 97–2003 (.xls): e.g. rent mapping table_zones
 xlrd>=2.0.1
+
+# Geospatial
 geopandas>=0.14
-# Parquet: thermal_comfort, sale_price, rent gold use GeoDataFrame.to_parquet(engine="pyarrow")
+# Parquet: thermal_comfort, sale_price, rent gold (GeoDataFrame.to_parquet(engine="pyarrow"))
 pyarrow>=14
 shapely>=2.0
+
+# Data acquisition
 gdown>=5.0
 
-# Sale price PDF → silver (src/silver/sale_price_median_to_silver.py)
+# PDF extraction (src/silver/sale_price_median_to_silver.py)
 pdfplumber>=0.11
 
-# Database
+# MySQL (SQLAlchemy engine in src/db.py) and MongoDB (auth / zone analytics via src/mongodb.py)
 sqlalchemy>=2.0
 pymysql>=1.1
 python-dotenv>=1.0
+pymongo>=4.6
 
-# API
+# HTTP API
 fastapi>=0.110
 uvicorn[standard]>=0.27
 pydantic>=2.0
+# pydantic.EmailStr (api/models/auth.py)
+email-validator>=2.0
 
-# Tests
+# Auth: JWT (python-jose), password hashing (bcrypt direct — passlib 1.7 is incompatible with bcrypt 4+)
+bcrypt>=4.0
+python-jose[cryptography]>=3.3
+
+# Tests (httpx: TestClient / async client)
 pytest>=8.0
 httpx>=0.27
+
+# EDA notebooks (exploration/, src/silver/*EDA*.ipynb, clean_dvf.ipynb)
+matplotlib>=3.8
+seaborn>=0.13

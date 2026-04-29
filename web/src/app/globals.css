@@ -2,28 +2,62 @@
 @import "mapbox-gl/dist/mapbox-gl.css";
 
 :root {
+  /* Apple system backgrounds */
+  --apple-bg: #ffffff;
+  --apple-bg-secondary: #f2f2f7;
+  --apple-bg-tertiary: #ffffff;
+
+  /* Apple labels */
+  --apple-label: #000000;
+  --apple-label-secondary: rgba(60, 60, 67, 0.6);
+  --apple-label-tertiary: rgba(60, 60, 67, 0.3);
+
+  /* Apple separator & fill */
+  --apple-separator: rgba(60, 60, 67, 0.29);
+  --apple-fill: rgba(120, 120, 128, 0.2);
+
+  /* Apple accent — System Blue */
+  --apple-blue: #007aff;
+  --apple-blue-hover: #0071e3;
+  --apple-blue-muted: rgba(0, 122, 255, 0.12);
+
+  /* Apple grays */
+  --apple-gray-1: #8e8e93;
+  --apple-gray-2: #aeaeb2;
+  --apple-gray-3: #c7c7cc;
+  --apple-gray-4: #d1d1d6;
+  --apple-gray-5: #e5e5ea;
+  --apple-gray-6: #f2f2f7;
+
+  /* Shadows */
+  --apple-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.06);
+  --apple-shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.08);
+
+  /* Legacy vars for body */
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #000000;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background: var(--apple-bg);
+  color: var(--apple-label);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Apple-style card utility */
+.apple-card {
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: var(--apple-shadow-card);
 }
 
 input[type="range"] {
@@ -32,8 +66,8 @@ input[type="range"] {
 }
 
 .mapboxgl-popup-content {
-  border-radius: 22px;
-  box-shadow: 0 24px 70px rgb(15 23 42 / 22%);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgb(15 23 42 / 12%);
   padding: 0;
 }
 

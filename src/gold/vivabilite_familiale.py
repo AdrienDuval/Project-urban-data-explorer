@@ -1,18 +1,12 @@
 """
 Silver → Gold: Indice de vivabilité familiale (composite score)
 
-Combines family-focused sub-indicators into a single 0–10 family suitability score
-for each Paris IRIS zone:
+Combines five real per-IRIS indicators into a single 0–10 family suitability score:
 
-    schools + childcare + safety + healthcare + environment
-    + green spaces + transport + daily services
+    schools + healthcare + transport + daily services + green spaces
 
-Housing price / affordability is intentionally excluded for now.
-
-The Gold table also stores an essential connectivity & services composite,
-combining transport, healthcare, and daily services on their existing 0–10 scale.
-
-A rank (1 = best zone in Paris) is also computed and stored.
+Each pillar is weighted equally at 20 %. Indicators without IRIS-level data
+(childcare, safety, environment) are excluded.
 
 Output:
     CSV  → data/gold/vivabilite_familiale_iris.csv
@@ -22,8 +16,6 @@ import pandas as pd
 
 from src.config import (
     DAILY_SERVICES_SCORE_GOLD,
-    ESSENTIAL_CONNECTIVITY_WEIGHTS,
-    FAMILY_FACTORS_GOLD,
     GREEN_SPACES_SCORE_GOLD,
     HEALTHCARE_SCORE_GOLD,
     SCHOOL_DENSITY_GOLD,
@@ -58,10 +50,8 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
     Returns:
         DataFrame with columns:
             IRIS, code_iris, LIBCOM, LIBIRIS, GRD_QUART, population,
-            school_score, childcare_score, safety_score, healthcare_score,
-            environment_score, green_spaces_score, transport_score,
-            daily_services_score,
-            essential_connectivity_score, essential_connectivity_rank,
+            school_score, healthcare_score, transport_score,
+            daily_services_score, green_spaces_score,
             vivabilite_score, vivabilite_rank
     """
     print("[vivabilite] Loading sub-scores...")
@@ -73,7 +63,6 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
     green = _read_gold(GREEN_SPACES_SCORE_GOLD)
     healthcare = _read_gold(HEALTHCARE_SCORE_GOLD)
     daily_services = _read_gold(DAILY_SERVICES_SCORE_GOLD)
-    family_factors = _read_gold(FAMILY_FACTORS_GOLD)
 
     # ── Start with school metadata as base ───────────────────────────────────
     school_cols = [
@@ -136,19 +125,6 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
         on="IRIS",
         how="left",
     )
-    result = result.merge(
-        family_factors[
-            [
-                "IRIS",
-                "childcare_score",
-                "safety_score",
-                "environment_score",
-            ]
-        ],
-        on="IRIS",
-        how="left",
-    )
-
     # Fill missing sub-scores with the city-wide median (data-failure fallback).
     for col in SCORE_COLS:
         median = result[col].median()
@@ -156,15 +132,6 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
         if missing:
             print(f"[vivabilite]   {missing} missing values in {col} — filled with median {median:.2f}")
         result[col] = result[col].fillna(median)
-
-    # ── Essential connectivity & services composite ──────────────────────────
-    result["essential_connectivity_score"] = 0.0
-    for col, weight in ESSENTIAL_CONNECTIVITY_WEIGHTS.items():
-        result["essential_connectivity_score"] += result[col] * weight
-    result["essential_connectivity_score"] = result["essential_connectivity_score"].round(2)
-    result["essential_connectivity_weights"] = ";".join(
-        f"{key}:{value}" for key, value in ESSENTIAL_CONNECTIVITY_WEIGHTS.items()
-    )
 
     # ── Composite ─────────────────────────────────────────────────────────────
     result["vivabilite_score"] = 0.0
@@ -181,10 +148,6 @@ def compute_vivabilite_familiale() -> pd.DataFrame:
     result["vivabilite_rank"] = result["vivabilite_score"].rank(
         ascending=False, method="min"
     ).astype(int)
-    result["essential_connectivity_rank"] = result["essential_connectivity_score"].rank(
-        ascending=False, method="min"
-    ).astype(int)
-
     result = result.sort_values("vivabilite_rank").reset_index(drop=True)
 
     # ── Save ──────────────────────────────────────────────────────────────────
