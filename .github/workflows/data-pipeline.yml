@@ -1,0 +1,64 @@
+# CI orchestration for the Bronze → Silver → Gold pipeline (Option A).
+# Manual runs: Actions → Data pipeline → Run workflow.
+#
+# Secrets: use EITHER repository secrets (Settings → Secrets → Actions → Repository secrets)
+# OR GitHub Environment secrets. If you use Environment secrets, set `environment:` below
+# to the exact name shown under Settings → Environments (required).
+
+name: Data pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Pipeline mode (full downloads bronze if missing; gold needs DB secrets)"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full
+          - silver
+          - gold
+
+  # Uncomment after manual runs succeed reliably (optional weekly refresh):
+  # schedule:
+  #   - cron: "0 3 * * 0"
+
+concurrency:
+  group: data-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    # Exact name from Settings → Environments (must match GitHub, including spelling).
+    environment: "Project-urban-data-explorer orhcestrator"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          PIPELINE_MODE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || 'full' }}
+        run: |
+          case "$PIPELINE_MODE" in
+            silver) python run_pipeline.py --silver ;;
+            gold)   python run_pipeline.py --gold ;;
+            *)      python run_pipeline.py ;;
+          esac

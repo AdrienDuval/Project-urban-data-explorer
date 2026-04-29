@@ -17,7 +17,10 @@ import {
   fetchSaleMap,
   fetchThermalComfortMap,
   fetchTransportPoints,
+  fetchVivabiliteArrondissement,
   fetchVivabiliteMap,
+  getAnalyticsUserKey,
+  recordZoneClick,
 } from "@/lib/api";
 import type {
   IndicatorMapFeatureCollection,
@@ -31,10 +34,7 @@ import type {
 
 type WeightKey =
   | "school_score"
-  | "childcare_score"
-  | "safety_score"
   | "healthcare_score"
-  | "environment_score"
   | "transport_score"
   | "daily_services_score"
   | "green_spaces_score";
@@ -43,7 +43,6 @@ type MainIndicator = "vivabilite" | "transport" | "thermal" | "housing";
 
 type MetricKey =
   | "vivabilite_score"
-  | "essential_connectivity_score"
   | "family_mix"
   | WeightKey
   | "thermal_score"
@@ -91,6 +90,8 @@ const mapStyle =
     ? "mapbox://styles/mapbox/outdoors-v12"
     : detailedFallbackMapStyle);
 
+const ZOOM_BREAK = 11; // below this zoom → arrondissement layer; at or above → IRIS layer
+
 const initialViewState: Partial<ViewState> = {
   longitude: 2.3522,
   latitude: 48.8566,
@@ -106,24 +107,18 @@ const ileDeFranceMaxBounds: [[number, number], [number, number]] = [
 
 const defaultWeights: Weights = {
   school_score: 20,
-  childcare_score: 15,
-  safety_score: 20,
-  healthcare_score: 15,
-  environment_score: 15,
-  green_spaces_score: 7.5,
-  transport_score: 5,
-  daily_services_score: 2.5,
+  healthcare_score: 20,
+  transport_score: 20,
+  daily_services_score: 20,
+  green_spaces_score: 20,
 };
 
 const equalWeights: Weights = {
-  school_score: 12.5,
-  childcare_score: 12.5,
-  safety_score: 12.5,
-  healthcare_score: 12.5,
-  environment_score: 12.5,
-  green_spaces_score: 12.5,
-  transport_score: 12.5,
-  daily_services_score: 12.5,
+  school_score: 20,
+  healthcare_score: 20,
+  transport_score: 20,
+  daily_services_score: 20,
+  green_spaces_score: 20,
 };
 
 const pillarMeta: Array<{
@@ -141,20 +136,6 @@ const pillarMeta: Array<{
     color: "#2563eb",
   },
   {
-    key: "childcare_score",
-    label: "Childcare",
-    shortLabel: "Childcare",
-    description: "Crèches and early childhood access (neutral baseline, 5/10 for all zones).",
-    color: "#db2777",
-  },
-  {
-    key: "safety_score",
-    label: "Safety",
-    shortLabel: "Safety",
-    description: "Neighbourhood safety and security (neutral baseline, 5/10 for all zones).",
-    color: "#dc2626",
-  },
-  {
     key: "healthcare_score",
     label: "Healthcare",
     shortLabel: "Health",
@@ -162,17 +143,10 @@ const pillarMeta: Array<{
     color: "#0891b2",
   },
   {
-    key: "environment_score",
-    label: "Environment",
-    shortLabel: "Env.",
-    description: "Air, noise, and heat (neutral baseline, 5/10 for all zones).",
-    color: "#65a30d",
-  },
-  {
     key: "transport_score",
     label: "Transport",
     shortLabel: "Transit",
-    description: "Metro, rail, tram, bus, cableway, and Velib access.",
+    description: "Metro, rail, tram, bus, cableway, and Vélib access.",
     color: "#7c3aed",
   },
   {
@@ -287,18 +261,13 @@ const subMetricOptions: Record<
   vivabilite: [
     {
       key: "vivabilite_score",
-      label: "Official score",
-      description: "Default composite from the pipeline weights.",
-    },
-    {
-      key: "essential_connectivity_score",
-      label: "Essential connectivity & services",
-      description: "Composite of transport, healthcare, and daily services access.",
+      label: "Vivabilité score",
+      description: "Composite of all five indicators, equally weighted.",
     },
     {
       key: "family_mix",
-      label: "Family mix",
-      description: "Custom composite using your weights.",
+      label: "Custom mix",
+      description: "Rebalance the five indicators with your own weights.",
     },
     ...pillarMeta.map((pillar) => ({
       key: pillar.key,
@@ -359,31 +328,28 @@ const fillLayer: LayerProps = {
   type: "fill",
   paint: {
     "fill-color": [
-      "interpolate",
-      ["linear"],
-      ["coalesce", ["get", "active_score"], 0],
-      0,
-      "#f43f5e",
-      2,
-      "#fb923c",
-      4,
-      "#fbbf24",
-      6,
-      "#a3e635",
-      8,
-      "#22c55e",
-      10,
-      "#047857",
+      "case",
+      ["!=", ["typeof", ["get", "active_score"]], "number"],
+      "#94a3b8",
+      [
+        "interpolate",
+        ["linear"],
+        ["get", "active_score"],
+        0,
+        "#f43f5e",
+        2,
+        "#fb923c",
+        4,
+        "#fbbf24",
+        6,
+        "#a3e635",
+        8,
+        "#22c55e",
+        10,
+        "#047857",
+      ],
     ],
-    "fill-opacity": [
-      "interpolate",
-      ["linear"],
-      ["zoom"],
-      9,
-      0.58,
-      13,
-      0.78,
-    ],
+    "fill-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.58, 13, 0.78],
     "fill-outline-color": "rgba(15, 23, 42, 0.18)",
   },
 };
@@ -707,7 +673,7 @@ function Metric({
   const styles = {
     light: "bg-white/70 text-slate-950",
     dark: "bg-slate-950 text-white shadow-[0_2px_10px_rgba(15,23,42,0.18)]",
-    green: "bg-emerald-600 text-white",
+    green: "bg-[#007AFF] text-white",
   };
 
   return (
@@ -771,7 +737,7 @@ function SidebarExpandedContent({
           </p>
           <h1 className="text-base font-semibold tracking-tight text-slate-950">Explorer</h1>
         </div>
-        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20">
+        <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-semibold text-[#007AFF] ring-1 ring-[#007AFF]/20">
           Paris
         </span>
       </div>
@@ -836,7 +802,7 @@ function SidebarExpandedContent({
                 </span>
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${
-                    active ? "bg-emerald-500" : "bg-slate-300"
+                    active ? "bg-[#007AFF]" : "bg-slate-300"
                   }`}
                 />
               </button>
@@ -902,7 +868,7 @@ function SidebarExpandedContent({
                   {feature.properties.arrondissement}
                 </span>
               </span>
-              <span className="shrink-0 text-[13px] font-semibold text-emerald-700">
+              <span className="shrink-0 text-[13px] font-semibold text-[#007AFF]">
                 {formatScore(feature.properties.active_score)}
               </span>
             </button>
@@ -1179,7 +1145,7 @@ function WeightPanel({
     <GlassCard className="max-h-[min(58vh,620px)] overflow-y-auto rounded-2xl p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#007AFF]">
             Score studio
           </p>
           <h2 className="mt-1 text-base font-semibold tracking-tight text-slate-950">
@@ -1364,7 +1330,7 @@ function DetailsPanel({
     <GlassCard className="max-h-[min(62vh,640px)] w-full overflow-y-auto rounded-t-2xl p-3 md:w-[min(100%,320px)] md:rounded-2xl">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#007AFF]">
             {selected ? "Selected area" : "Best current match"}
           </p>
           <h2 className="mt-1 truncate text-[15px] font-semibold leading-snug tracking-tight text-slate-950">
@@ -1468,8 +1434,8 @@ function DetailsPanel({
 
       {bestPillar && weakestPillar ? (
         <div className="mt-2 grid grid-cols-2 gap-1.5">
-          <div className="rounded-lg bg-emerald-50 p-2">
-            <p className="text-[9px] font-medium text-emerald-700">Strongest pillar</p>
+          <div className="rounded-lg bg-blue-50 p-2">
+            <p className="text-[9px] font-medium text-[#007AFF]">Strongest pillar</p>
             <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
               {bestPillar.shortLabel} · {formatScore(bestPillar.value)}
             </p>
@@ -1499,6 +1465,8 @@ function DetailsPanel({
 export function EnhancedMapDashboard() {
   const [vivabiliteData, setVivabiliteData] =
     useState<VivabiliteFeatureCollection | null>(null);
+  const [arrData, setArrData] = useState<VivabiliteFeatureCollection | null>(null);
+  const [currentZoom, setCurrentZoom] = useState(initialViewState.zoom ?? ZOOM_BREAK);
   const [thermalData, setThermalData] = useState<IndicatorMapFeatureCollection | null>(
     null,
   );
@@ -1558,22 +1526,25 @@ export function EnhancedMapDashboard() {
 
     fetchVivabiliteMap()
       .then((geojson) => {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         setVivabiliteData(geojson);
         setError(null);
       })
       .catch((err: Error) => {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         setError(err.message);
       })
       .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
+      });
+
+    fetchVivabiliteArrondissement()
+      .then((geojson) => {
+        if (!active) return;
+        setArrData(geojson);
+      })
+      .catch(() => {
+        /* arrondissement layer is optional — silently ignore */
       });
 
     return () => {
@@ -1664,14 +1635,12 @@ export function EnhancedMapDashboard() {
   }, []);
 
   const sourceData = useMemo(() => {
-    if (mainIndicator === "thermal") {
-      return thermalData;
-    }
-    if (mainIndicator === "housing") {
-      return selectedMetric === "sale_score" ? saleData : rentData;
-    }
+    if (mainIndicator === "thermal") return thermalData;
+    if (mainIndicator === "housing") return selectedMetric === "sale_score" ? saleData : rentData;
+    // vivabilite & transport: use arrondissement layer when zoomed out
+    if (currentZoom < ZOOM_BREAK && arrData) return arrData;
     return vivabiliteData;
-  }, [mainIndicator, rentData, saleData, selectedMetric, thermalData, vivabiliteData]);
+  }, [mainIndicator, rentData, saleData, selectedMetric, thermalData, vivabiliteData, currentZoom, arrData]);
 
   const computedData = useMemo(
     () => buildComputedGeojson(sourceData, weights, selectedMetric),
@@ -1834,6 +1803,20 @@ export function EnhancedMapDashboard() {
     setSelectedTransportPoint(null);
     setTransportPopup(null);
     setShowDetails(true);
+
+    const zoneId =
+      (typeof properties.code_iris === "string" && properties.code_iris.trim()) ||
+      String(properties.map_id ?? "").trim();
+    if (zoneId) {
+      const geo = properties.geography;
+      recordZoneClick({
+        user_key: getAnalyticsUserKey(),
+        zone_id: zoneId,
+        zone_name: typeof properties.name === "string" ? properties.name : null,
+        geography:
+          geo === "iris" || geo === "arrondissement" ? geo : undefined,
+      });
+    }
   }
 
   function changeMainIndicator(indicator: MainIndicator) {
@@ -1923,6 +1906,7 @@ export function EnhancedMapDashboard() {
           onClick={handleClick}
           onMouseLeave={handleMouseLeave}
           onMouseMove={handleMouseMove}
+          onMove={(e) => setCurrentZoom(e.viewState.zoom)}
           reuseMaps
           style={{ height: "100%", width: "100%" }}
         >
@@ -1965,15 +1949,15 @@ export function EnhancedMapDashboard() {
               }}
             >
               <div className="max-w-[200px] p-1.5">
-                <p className="text-[8px] font-semibold uppercase tracking-wide text-emerald-700">
+                <p className="text-[8px] font-semibold uppercase tracking-wide text-[#007AFF]">
                   {selected ? "Selected" : "Preview"}
                 </p>
                 <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-950">
                   {popupFeature.name}
                 </p>
                 <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
-                  <div className="rounded-md bg-emerald-50 px-1.5 py-1">
-                    <p className="text-[8px] font-medium text-emerald-700">Score</p>
+                  <div className="rounded-md bg-blue-50 px-1.5 py-1">
+                    <p className="text-[8px] font-medium text-[#007AFF]">Score</p>
                     <p className="font-semibold tabular-nums text-slate-950">
                       {formatScore(popupFeature.active_score)}
                     </p>
@@ -2074,12 +2058,17 @@ export function EnhancedMapDashboard() {
             {!uiHidden && showTitleCard ? (
               <GlassCard className="pointer-events-auto max-w-xl rounded-2xl p-2.5 md:p-3">
                 <div className="flex flex-wrap items-center gap-1">
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700 ring-1 ring-emerald-600/15">
+                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#007AFF] ring-1 ring-[#007AFF]/15">
                     Urban Data Explorer
                   </span>
                   <span className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-medium text-slate-500 ring-1 ring-slate-900/5">
                     {metricLabel}
                   </span>
+                  {(mainIndicator === "vivabilite" || mainIndicator === "transport") && arrData ? (
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-medium text-sky-600 ring-1 ring-sky-600/15">
+                      {currentZoom < ZOOM_BREAK ? "Arrondissements · zoom in for IRIS detail" : "IRIS zones · zoom out for arrondissements"}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-end gap-1.5">
                   <h1 className="text-base font-semibold tracking-tight text-slate-950 md:text-lg">

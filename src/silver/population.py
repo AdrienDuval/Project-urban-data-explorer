@@ -6,7 +6,7 @@ and keeps only the columns needed downstream.
 """
 import pandas as pd
 
-from src.config import POPULATION_RAW, POPULATION_SILVER, MIN_POPULATION
+from src.config import POPULATION_RAW, POPULATION_SILVER
 
 
 def process_population() -> pd.DataFrame:
@@ -16,7 +16,6 @@ def process_population() -> pd.DataFrame:
     Filters:
     - COM starts with '75'  (Paris only — no DEP column in 2022 CSV)
     - TYP_IRIS == 'H'  (residential zones only, excludes activity/mixed zones)
-    - population > MIN_POPULATION  (drops near-empty zones)
 
     Returns:
         DataFrame with columns: IRIS, LAB_IRIS, population
@@ -28,7 +27,6 @@ def process_population() -> pd.DataFrame:
 
     paris = paris[["IRIS", "LAB_IRIS", "P22_POP_FR"]]
     paris = paris.rename(columns={"P22_POP_FR": "population"})
-    paris = paris[paris["population"] > MIN_POPULATION]
 
     paris.to_csv(POPULATION_SILVER, index=False)
     print(f"[population] {len(paris)} IRIS zones saved → {POPULATION_SILVER.name}")

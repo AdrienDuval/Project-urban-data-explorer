@@ -17,6 +17,7 @@ import geopandas as gpd
 import pandas as pd
 
 from src.config import (
+    ARRONDISSEMENTS,
     BDCOM_GOLD,
     DVF_GOLD,
     IRIS_GEOJSON,
@@ -65,6 +66,7 @@ class DataStore:
     bdcom_scores: pd.DataFrame
     dvf_scores: pd.DataFrame
     iris_geojson: dict[str, Any]
+    arrondissements_geojson: dict[str, Any]
 
     # ------------------------------------------------------------------
     # Factory
@@ -92,6 +94,15 @@ class DataStore:
         else:
             logger.warning("IRIS GeoJSON not found: %s — run `python run_pipeline.py`", IRIS_GEOJSON)
             iris_geojson = {"type": "FeatureCollection", "features": []}
+
+        if ARRONDISSEMENTS.exists():
+            logger.info("Loading geometry: %s", ARRONDISSEMENTS.name)
+            with ARRONDISSEMENTS.open(encoding="utf-8") as fh:
+                arrondissements_geojson = json.load(fh)
+            logger.info("  → %d arrondissements loaded", len(arrondissements_geojson.get("features", [])))
+        else:
+            logger.warning("Arrondissements GeoJSON not found: %s", ARRONDISSEMENTS)
+            arrondissements_geojson = {"type": "FeatureCollection", "features": []}
 
         if SCHOOL_DENSITY_GOLD.exists():
             logger.info("Loading gold: %s", SCHOOL_DENSITY_GOLD.name)
@@ -200,4 +211,5 @@ class DataStore:
             bdcom_scores=_clean_df(bdcom_scores),
             dvf_scores=_clean_df(dvf_scores),
             iris_geojson=iris_geojson,
+            arrondissements_geojson=arrondissements_geojson,
         )
