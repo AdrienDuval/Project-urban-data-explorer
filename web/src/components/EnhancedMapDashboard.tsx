@@ -4,6 +4,7 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { useEffect, useMemo, useState } from "react";
 import Map, {
   Layer,
+  NavigationControl,
   Popup,
   Source,
   type LayerProps,
@@ -98,9 +99,9 @@ const initialViewState: Partial<ViewState> = {
   bearing: 0,
 };
 
-const parisMaxBounds: [[number, number], [number, number]] = [
-  [2.22, 48.8],
-  [2.48, 48.92],
+const ileDeFranceMaxBounds: [[number, number], [number, number]] = [
+  [1.4, 48.1],
+  [3.6, 49.3],
 ];
 
 const defaultWeights: Weights = {
@@ -207,28 +208,73 @@ const mainIndicatorOptions: Array<{
   key: MainIndicator;
   label: string;
   description: string;
+  abbr: string;
 }> = [
   {
     key: "vivabilite",
     label: "Vivabilité familiale",
     description: "Composite family suitability score and its pillars.",
+    abbr: "VF",
   },
   {
     key: "transport",
     label: "Transport",
     description: "Public transport accessibility and stop overlays.",
+    abbr: "TR",
   },
   {
     key: "thermal",
     label: "Confort thermique",
     description: "Tree density and cooling-area comfort by IRIS.",
+    abbr: "TH",
   },
   {
     key: "housing",
     label: "Logement",
     description: "Rent and sale affordability at arrondissement level.",
+    abbr: "LG",
   },
 ];
+
+function MainIndicatorGlyph({ indicator }: { indicator: MainIndicator }) {
+  const stroke = "currentColor";
+  const line = {
+    fill: "none" as const,
+    stroke,
+    strokeWidth: 1.35,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  switch (indicator) {
+    case "vivabilite":
+      return (
+        <svg aria-hidden className="h-4 w-4" viewBox="0 0 16 16">
+          <circle cx="8" cy="6.5" fill="none" r="2.25" stroke={stroke} strokeWidth={1.35} />
+          <path d="M8 2v1.25M5.2 4.2l.9.9M10.9 5.1l.9-.9M4 8.5h8M6 13h4" {...line} />
+        </svg>
+      );
+    case "transport":
+      return (
+        <svg aria-hidden className="h-4 w-4" viewBox="0 0 16 16">
+          <path d="M4 12V6l4-3 4 3v6M4 10h8M6 12v2M10 12v2" {...line} />
+        </svg>
+      );
+    case "thermal":
+      return (
+        <svg aria-hidden className="h-4 w-4" viewBox="0 0 16 16">
+          <path d="M8 2v8.5a2.5 2.5 0 1 0 2.5-2.5M8 4.5V2" {...line} />
+        </svg>
+      );
+    case "housing":
+      return (
+        <svg aria-hidden className="h-4 w-4" viewBox="0 0 16 16">
+          <path d="M2 7l6-4.5L14 7v7H2V7zM6 14V9h4v5" {...line} />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
 
 const subMetricOptions: Record<
   MainIndicator,
@@ -642,7 +688,7 @@ function GlassCard({
 }) {
   return (
     <div
-      className={`border border-white/65 bg-white/82 shadow-[0_24px_80px_rgba(15,23,42,0.18)] ring-1 ring-slate-900/5 backdrop-blur-2xl ${className}`}
+      className={`border border-white/65 bg-white/82 shadow-[0_10px_40px_rgba(15,23,42,0.08)] ring-1 ring-slate-900/5 backdrop-blur-xl ${className}`}
     >
       {children}
     </div>
@@ -660,14 +706,217 @@ function Metric({
 }) {
   const styles = {
     light: "bg-white/70 text-slate-950",
-    dark: "bg-slate-950 text-white",
+    dark: "bg-slate-950 text-white shadow-[0_2px_10px_rgba(15,23,42,0.18)]",
     green: "bg-emerald-600 text-white",
   };
 
   return (
-    <div className={`rounded-[1.4rem] p-4 ${styles[tone]}`}>
-      <p className="text-xs font-medium opacity-70">{label}</p>
-      <p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>
+    <div className={`rounded-xl px-2 py-1.5 ${styles[tone]}`}>
+      <p className="text-[9px] font-medium uppercase tracking-wide opacity-75">{label}</p>
+      <p className="mt-0.5 text-[15px] font-semibold leading-tight tracking-tight tabular-nums">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SidebarExpandedContent({
+  featureCount,
+  averageScore,
+  schoolShare,
+  mainIndicator,
+  selectedSubMetric,
+  transportTypeCounts,
+  visibleTransportTypes,
+  arrondissementOptions,
+  arrondissementFilter,
+  minScore,
+  query,
+  ranking,
+  onSubMetricChange,
+  onArrondissementFilterChange,
+  onMinScoreChange,
+  onQueryChange,
+  onRankingSelect,
+  onTransportTypeToggle,
+}: {
+  featureCount: number;
+  averageScore: number | null;
+  schoolShare: number;
+  mainIndicator: MainIndicator;
+  selectedSubMetric: MetricKey;
+  transportTypeCounts: Record<TransportType, number>;
+  visibleTransportTypes: Record<TransportType, boolean>;
+  arrondissementOptions: string[];
+  arrondissementFilter: string;
+  minScore: number;
+  query: string;
+  ranking: ComputedFeature[];
+  onSubMetricChange: (metric: MetricKey) => void;
+  onArrondissementFilterChange: (arrondissement: string) => void;
+  onMinScoreChange: (score: number) => void;
+  onQueryChange: (query: string) => void;
+  onRankingSelect: (id: string) => void;
+  onTransportTypeToggle: (type: TransportType) => void;
+}) {
+  const showTransportFilters = mainIndicator === "transport";
+  const subMetrics = subMetricOptions[mainIndicator];
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain border-l border-slate-900/8 bg-white/80 backdrop-blur-xl">
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-900/8 px-3 py-2.5">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Urban Data
+          </p>
+          <h1 className="text-base font-semibold tracking-tight text-slate-950">Explorer</h1>
+        </div>
+        <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20">
+          Paris
+        </span>
+      </div>
+
+      <div className="space-y-1.5 px-3 pb-3 pt-3">
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          Sub-indicators
+        </p>
+        {subMetrics.map((metric) => {
+          const active = selectedSubMetric === metric.key;
+          return (
+            <button
+              className={`w-full rounded-xl px-2.5 py-2 text-left transition ${
+                active
+                  ? "bg-slate-900 text-white shadow-[0_2px_10px_rgba(15,23,42,0.18)]"
+                  : "bg-white/70 text-slate-600 hover:bg-white"
+              }`}
+              key={metric.key}
+              onClick={() => onSubMetricChange(metric.key)}
+              type="button"
+            >
+              <span className="block text-[13px] font-semibold leading-snug">{metric.label}</span>
+              <span
+                className={`mt-0.5 block line-clamp-2 text-[11px] leading-snug ${
+                  active ? "text-slate-200" : "text-slate-400"
+                }`}
+              >
+                {metric.description}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {showTransportFilters ? (
+        <div className="space-y-1.5 px-3 pb-3">
+          <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Stops to show
+          </p>
+          {transportTypes.map((transport) => {
+            const active = visibleTransportTypes[transport.type];
+            return (
+              <button
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
+                  active ? "bg-white text-slate-900 ring-1 ring-slate-900/10" : "bg-white/40 text-slate-400"
+                }`}
+                key={transport.type}
+                onClick={() => onTransportTypeToggle(transport.type)}
+                type="button"
+              >
+                <span
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[9px] font-bold text-white"
+                  style={{ backgroundColor: transport.color }}
+                >
+                  {transport.icon}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-semibold">{transport.label}</span>
+                  <span className="block text-[11px] text-slate-400">
+                    {formatNumber(transportTypeCounts[transport.type] ?? 0)} points
+                  </span>
+                </span>
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    active ? "bg-emerald-500" : "bg-slate-300"
+                  }`}
+                />
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="space-y-2 border-t border-slate-900/8 px-3 py-3">
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          Search & filters
+        </p>
+        <input
+          className="w-full rounded-xl border border-slate-900/8 bg-white/80 px-2.5 py-1.5 text-[13px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Search IRIS, arrondissement..."
+          type="search"
+          value={query}
+        />
+        <select
+          className="w-full rounded-xl border border-slate-900/8 bg-white/80 px-2.5 py-1.5 text-[13px] text-slate-900 outline-none transition focus:border-slate-400"
+          onChange={(event) => onArrondissementFilterChange(event.target.value)}
+          value={arrondissementFilter}
+        >
+          <option value="">All arrondissements</option>
+          {arrondissementOptions.map((arrondissement) => (
+            <option key={arrondissement} value={arrondissement}>
+              {arrondissement}
+            </option>
+          ))}
+        </select>
+        <label className="block rounded-xl bg-white/60 p-2.5 text-[11px] font-medium text-slate-500">
+          Minimum score: {minScore.toFixed(1)}/10
+          <input
+            className="mt-1.5 w-full accent-slate-900"
+            max={10}
+            min={0}
+            onChange={(event) => onMinScoreChange(Number(event.target.value))}
+            step={0.5}
+            type="range"
+            value={minScore}
+          />
+        </label>
+      </div>
+
+      <div className="space-y-1.5 px-3 pb-3">
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          Top matches
+        </p>
+        {ranking.length > 0 ? (
+          ranking.map((feature) => (
+            <button
+              className="flex w-full items-center justify-between gap-2 rounded-xl bg-white/60 px-2.5 py-1.5 text-left transition hover:bg-white"
+              key={feature.properties.map_id}
+              onClick={() => onRankingSelect(feature.properties.map_id)}
+              type="button"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-semibold text-slate-900">
+                  #{feature.properties.active_rank} {feature.properties.name}
+                </span>
+                <span className="block truncate text-[11px] text-slate-400">
+                  {feature.properties.arrondissement}
+                </span>
+              </span>
+              <span className="shrink-0 text-[13px] font-semibold text-emerald-700">
+                {formatScore(feature.properties.active_score)}
+              </span>
+            </button>
+          ))
+        ) : (
+          <p className="rounded-xl bg-white/60 px-2.5 py-2 text-[13px] text-slate-500">No matching zones.</p>
+        )}
+      </div>
+
+      <div className="mt-auto grid grid-cols-3 gap-1.5 border-t border-slate-900/8 p-3 md:block md:space-y-1.5">
+        <Metric label="Zones" value={formatNumber(featureCount)} />
+        <Metric label="Avg" value={formatScore(averageScore)} />
+        <Metric label="Schools" value={`${schoolShare}%`} />
+      </div>
     </div>
   );
 }
@@ -685,6 +934,11 @@ function Sidebar({
   minScore,
   query,
   ranking,
+  expanded,
+  onToggleExpanded,
+  uiHidden,
+  mobileSheetOpen,
+  onMobileSheetOpenChange,
   onMainIndicatorChange,
   onSubMetricChange,
   onArrondissementFilterChange,
@@ -705,6 +959,11 @@ function Sidebar({
   minScore: number;
   query: string;
   ranking: ComputedFeature[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  uiHidden: boolean;
+  mobileSheetOpen: boolean;
+  onMobileSheetOpenChange: (open: boolean) => void;
   onMainIndicatorChange: (indicator: MainIndicator) => void;
   onSubMetricChange: (metric: MetricKey) => void;
   onArrondissementFilterChange: (arrondissement: string) => void;
@@ -713,202 +972,146 @@ function Sidebar({
   onRankingSelect: (id: string) => void;
   onTransportTypeToggle: (type: TransportType) => void;
 }) {
-  const showTransportFilters = mainIndicator === "transport";
-  const subMetrics = subMetricOptions[mainIndicator];
+  const showExpandedPanel = expanded && !uiHidden;
 
-  return (
-    <aside className="pointer-events-auto flex max-h-[190px] shrink-0 flex-col overflow-y-auto border-white/70 bg-white/88 shadow-[18px_0_70px_rgba(15,23,42,0.14)] ring-1 ring-slate-900/5 backdrop-blur-2xl md:h-screen md:max-h-screen md:w-72 md:border-r">
-      <div className="flex items-center justify-between border-b border-slate-200/70 px-5 py-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">
-            Urban Data
-          </p>
-          <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-950">
-            Explorer
-          </h1>
-        </div>
-        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
-          Paris
-        </span>
-      </div>
+  function handleRailClick(key: MainIndicator) {
+    onMainIndicatorChange(key);
+    if (!uiHidden && !expanded) {
+      onToggleExpanded();
+    }
+    if (!uiHidden) {
+      onMobileSheetOpenChange(true);
+    } else {
+      onMobileSheetOpenChange(false);
+    }
+  }
 
-      <div className="space-y-2 px-4 pb-2 pt-4">
-        <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Main indicators
-        </p>
-        {mainIndicatorOptions.map((indicator) => {
-          const active = mainIndicator === indicator.key;
+  const expandedProps = {
+    arrondissementFilter,
+    arrondissementOptions,
+    averageScore,
+    featureCount,
+    mainIndicator,
+    minScore,
+    onArrondissementFilterChange,
+    onMinScoreChange,
+    onQueryChange,
+    onRankingSelect: (id: string) => {
+      onRankingSelect(id);
+      onMobileSheetOpenChange(false);
+    },
+    onSubMetricChange,
+    onTransportTypeToggle,
+    query,
+    ranking,
+    schoolShare,
+    selectedSubMetric,
+    transportTypeCounts,
+    visibleTransportTypes,
+  };
 
-          return (
-            <button
-              className={`w-full rounded-2xl px-3 py-3 text-left transition ${
-                active
-                  ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/20"
-                  : "bg-white/55 text-slate-600 hover:bg-slate-100"
-              }`}
-              key={indicator.key}
-              onClick={() => onMainIndicatorChange(indicator.key)}
-              type="button"
+  const rail = (
+    <nav
+      aria-label="Main indicators"
+      className="flex shrink-0 flex-row items-center gap-1 overflow-x-auto border-b border-slate-900/8 bg-white/88 px-2 py-2 shadow-[0_10px_40px_rgba(15,23,42,0.06)] backdrop-blur-xl md:h-screen md:w-16 md:flex-col md:gap-1.5 md:border-b-0 md:border-r md:px-1.5 md:py-3"
+    >
+      <button
+        aria-expanded={expanded}
+        className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100 md:flex"
+        onClick={onToggleExpanded}
+        title={expanded ? "Collapse panel" : "Expand panel"}
+        type="button"
+      >
+        <span className="text-sm font-semibold">{expanded ? "‹" : "›"}</span>
+      </button>
+      {mainIndicatorOptions.map((indicator) => {
+        const active = mainIndicator === indicator.key;
+        return (
+          <button
+            className={`group relative flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2 transition md:aspect-square md:w-11 md:px-0 ${
+              active
+                ? "bg-slate-900 text-white shadow-[0_2px_10px_rgba(15,23,42,0.18)]"
+                : "bg-white/70 text-slate-600 hover:bg-white md:bg-transparent"
+            }`}
+            key={indicator.key}
+            onClick={() => handleRailClick(indicator.key)}
+            title={`${indicator.label} — ${indicator.description}`}
+            type="button"
+          >
+            <span
+              className={`text-[10px] font-bold tracking-tight ${active ? "text-white" : "text-slate-900"}`}
             >
-              <span className="block text-sm font-bold">{indicator.label}</span>
-              <span
-                className={`mt-0.5 block text-xs ${
-                  active ? "text-emerald-50" : "text-slate-400"
-                }`}
-              >
+              {indicator.abbr}
+            </span>
+            <span className={active ? "[&_svg]:text-white" : "[&_svg]:text-slate-500"}>
+              <MainIndicatorGlyph indicator={indicator.key} />
+            </span>
+            <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 whitespace-nowrap rounded-xl bg-slate-900/95 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 shadow-lg ring-1 ring-white/10 backdrop-blur transition-opacity group-hover:opacity-100 md:group-hover:block">
+              <span className="font-semibold">{indicator.label}</span>
+              <span className="mt-0.5 block max-w-[220px] whitespace-normal text-[10px] font-normal text-slate-300">
                 {indicator.description}
               </span>
-            </button>
-          );
-        })}
-      </div>
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
 
-      <div className="space-y-2 px-4 pb-4">
-        <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Sub-indicators
-        </p>
-        {subMetrics.map((metric) => {
-          const active = selectedSubMetric === metric.key;
+  return (
+    <>
+      <aside className="pointer-events-auto z-20 flex w-full shrink-0 flex-col md:h-screen md:w-auto md:flex-row">
+        {rail}
+        {showExpandedPanel ? (
+          <div className="hidden h-screen w-[272px] shrink-0 md:flex md:flex-col">
+            <SidebarExpandedContent {...expandedProps} />
+          </div>
+        ) : null}
+      </aside>
 
-          return (
-            <button
-              className={`w-full rounded-2xl px-3 py-2.5 text-left transition ${
-                active
-                  ? "bg-slate-950 text-white shadow-lg shadow-slate-950/20"
-                  : "bg-white/55 text-slate-600 hover:bg-slate-100"
-              }`}
-              key={metric.key}
-              onClick={() => onSubMetricChange(metric.key)}
-              type="button"
-            >
-              <span className="block text-sm font-bold">{metric.label}</span>
-              <span className={`mt-0.5 block text-xs ${active ? "text-slate-200" : "text-slate-400"}`}>
-                {metric.description}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {showTransportFilters ? (
-        <div className="space-y-2 px-4 pb-4">
-          <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Stops to show
-          </p>
-          {transportTypes.map((transport) => {
-            const active = visibleTransportTypes[transport.type];
-
-            return (
+      {mobileSheetOpen && showExpandedPanel ? (
+        <div className="fixed inset-0 z-30 md:hidden">
+          <button
+            aria-label="Close panel"
+            className="absolute inset-0 bg-slate-950/25"
+            onClick={() => onMobileSheetOpenChange(false)}
+            type="button"
+          />
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[min(85vh,640px)] flex-col rounded-t-3xl border border-slate-900/8 bg-white/95 shadow-[0_-12px_48px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+            <div className="flex shrink-0 justify-center py-2">
+              <span className="h-1 w-10 rounded-full bg-slate-300" />
+            </div>
+            <div className="flex items-center justify-between border-b border-slate-900/8 px-4 py-2">
+              <p className="text-[13px] font-semibold text-slate-900">Indicators & filters</p>
               <button
-                className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition ${
-                  active ? "bg-white text-slate-900" : "bg-white/35 text-slate-400"
-                }`}
-                key={transport.type}
-                onClick={() => onTransportTypeToggle(transport.type)}
+                className="rounded-full px-3 py-1 text-[12px] font-medium text-slate-600 hover:bg-slate-100"
+                onClick={() => onMobileSheetOpenChange(false)}
                 type="button"
               >
-                <span
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[10px] font-black text-white"
-                  style={{ backgroundColor: transport.color }}
-                >
-                  {transport.icon}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-bold">{transport.label}</span>
-                  <span className="block text-xs text-slate-400">
-                    {formatNumber(transportTypeCounts[transport.type] ?? 0)} points
-                  </span>
-                </span>
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    active ? "bg-emerald-500" : "bg-slate-300"
-                  }`}
-                />
+                Close
               </button>
-            );
-          })}
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <SidebarExpandedContent {...expandedProps} />
+            </div>
+          </div>
         </div>
       ) : null}
-
-      <div className="space-y-3 border-t border-slate-200/70 px-4 py-4">
-        <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Search & filters
-        </p>
-        <input
-          className="w-full rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400"
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search IRIS, arrondissement..."
-          type="search"
-          value={query}
-        />
-        <select
-          className="w-full rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-emerald-400"
-          onChange={(event) => onArrondissementFilterChange(event.target.value)}
-          value={arrondissementFilter}
-        >
-          <option value="">All arrondissements</option>
-          {arrondissementOptions.map((arrondissement) => (
-            <option key={arrondissement} value={arrondissement}>
-              {arrondissement}
-            </option>
-          ))}
-        </select>
-        <label className="block rounded-2xl bg-white/55 p-3 text-xs font-semibold text-slate-500">
-          Minimum score: {minScore.toFixed(1)}/10
-          <input
-            className="mt-2 w-full accent-emerald-600"
-            max={10}
-            min={0}
-            onChange={(event) => onMinScoreChange(Number(event.target.value))}
-            step={0.5}
-            type="range"
-            value={minScore}
-          />
-        </label>
-      </div>
-
-      <div className="space-y-2 px-4 pb-4">
-        <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Top matches
-        </p>
-        {ranking.length > 0 ? (
-          ranking.map((feature) => (
-            <button
-              className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/55 px-3 py-2 text-left transition hover:bg-white"
-              key={feature.properties.map_id}
-              onClick={() => onRankingSelect(feature.properties.map_id)}
-              type="button"
-            >
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-bold text-slate-900">
-                  #{feature.properties.active_rank} {feature.properties.name}
-                </span>
-                <span className="block truncate text-xs text-slate-400">
-                  {feature.properties.arrondissement}
-                </span>
-              </span>
-              <span className="shrink-0 text-sm font-bold text-emerald-700">
-                {formatScore(feature.properties.active_score)}
-              </span>
-            </button>
-          ))
-        ) : (
-          <p className="rounded-2xl bg-white/55 px-3 py-3 text-sm text-slate-500">
-            No matching zones.
-          </p>
-        )}
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 border-t border-slate-200/70 p-4 md:mt-auto md:block md:space-y-2">
-        <Metric label="Zones" value={formatNumber(featureCount)} />
-        <Metric label="Avg" value={formatScore(averageScore)} />
-        <Metric label="Schools" value={`${schoolShare}%`} />
-      </div>
-    </aside>
+    </>
   );
 }
 
-function Legend({ label = "Score" }: { label?: string }) {
+function Legend({
+  label = "Score",
+  onClose,
+  showHoverPreview,
+  onShowHoverPreviewChange,
+}: {
+  label?: string;
+  onClose: () => void;
+  showHoverPreview: boolean;
+  onShowHoverPreviewChange: (value: boolean) => void;
+}) {
   const stops = [
     { label: "0", color: "#f43f5e" },
     { label: "2", color: "#fb923c" },
@@ -919,23 +1122,42 @@ function Legend({ label = "Score" }: { label?: string }) {
   ];
 
   return (
-    <GlassCard className="rounded-[1.6rem] p-4">
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <p className="text-sm font-semibold text-slate-950">{label}</p>
-        <p className="text-xs font-medium text-slate-500">low to high</p>
+    <GlassCard className="rounded-xl p-2.5">
+      <div className="mb-1.5 flex items-start justify-between gap-1.5">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold leading-tight text-slate-950">{label}</p>
+          <p className="text-[9px] font-medium text-slate-500">low to high</p>
+        </div>
+        <button
+          aria-label="Close legend"
+          className="shrink-0 rounded-full px-1.5 py-0.5 text-[13px] font-medium leading-none text-slate-500 hover:bg-slate-100"
+          onClick={onClose}
+          type="button"
+        >
+          ×
+        </button>
       </div>
-      <div className="h-3 overflow-hidden rounded-full bg-linear-to-r from-rose-500 via-amber-300 to-emerald-700" />
-      <div className="mt-2 flex justify-between text-[11px] font-medium text-slate-500">
+      <div className="h-2 overflow-hidden rounded-full bg-linear-to-r from-rose-500 via-amber-300 to-emerald-700" />
+      <div className="mt-1.5 flex flex-wrap justify-between gap-x-0.5 gap-y-0.5 text-[9px] font-medium tabular-nums text-slate-500">
         {stops.map((stop) => (
           <span key={stop.label} className="flex items-center gap-1">
             <span
-              className="h-2 w-2 rounded-full"
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
               style={{ backgroundColor: stop.color }}
             />
             {stop.label}
           </span>
         ))}
       </div>
+      <label className="mt-2 flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-slate-50/90 px-2 py-1.5 text-[10px] font-medium text-slate-600">
+        <span>Hover preview</span>
+        <input
+          checked={showHoverPreview}
+          className="h-3.5 w-3.5 accent-slate-900"
+          onChange={(e) => onShowHoverPreviewChange(e.target.checked)}
+          type="checkbox"
+        />
+      </label>
     </GlassCard>
   );
 }
@@ -954,32 +1176,32 @@ function WeightPanel({
   const total = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
 
   return (
-    <GlassCard className="max-h-[min(62vh,680px)] overflow-y-auto rounded-4xl p-5">
-      <div className="flex items-start justify-between gap-4">
+    <GlassCard className="max-h-[min(58vh,620px)] overflow-y-auto rounded-2xl p-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
             Score studio
           </p>
-          <h2 className="mt-2 text-xl font-bold tracking-tight text-slate-950">
+          <h2 className="mt-1 text-base font-semibold tracking-tight text-slate-950">
             Choose your family priorities
           </h2>
-          <p className="mt-1 text-sm leading-5 text-slate-500">
+          <p className="mt-1 text-[12px] leading-snug text-slate-500">
             Scores update instantly. Higher school weight favors areas with
             stronger school accessibility.
           </p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap gap-1.5">
         <button
-          className="rounded-full bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+          className="rounded-full bg-slate-950 px-2.5 py-1 text-[10px] font-semibold text-white shadow-[0_2px_10px_rgba(15,23,42,0.18)] transition hover:bg-slate-800"
           onClick={() => onPreset(defaultWeights)}
           type="button"
         >
           Official family score
         </button>
         <button
-          className="rounded-full border border-slate-200 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-white"
+          className="rounded-full border border-slate-900/8 bg-white/70 px-2.5 py-1 text-[10px] font-semibold text-slate-700 transition hover:bg-white"
           onClick={() => onPreset(equalWeights)}
           type="button"
         >
@@ -987,18 +1209,18 @@ function WeightPanel({
         </button>
       </div>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-3 space-y-2">
         {pillarMeta.map((pillar) => {
           const share = total > 0 ? Math.round((weights[pillar.key] / total) * 100) : 0;
 
           return (
             <div key={pillar.key}>
-              <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{pillar.label}</p>
-                  <p className="text-xs text-slate-500">{pillar.description}</p>
+                  <p className="text-[12px] font-semibold text-slate-900">{pillar.label}</p>
+                  <p className="text-[10px] leading-snug text-slate-500">{pillar.description}</p>
                 </div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
                   {share}%
                 </span>
               </div>
@@ -1019,25 +1241,25 @@ function WeightPanel({
         })}
       </div>
 
-      <div className="mt-5 rounded-[1.4rem] bg-slate-950 p-4 text-white">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+      <div className="mt-3 rounded-xl bg-slate-950 p-2.5 text-white">
+        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
           Current top 3
         </p>
-        <div className="mt-3 space-y-3">
+        <div className="mt-1.5 space-y-1.5">
           {topFeatures.slice(0, 3).map((feature) => (
             <div
-              className="flex items-center justify-between gap-3"
+              className="flex items-center justify-between gap-2"
               key={feature.properties.map_id}
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">
+                <p className="truncate text-[11px] font-semibold leading-snug">
                   #{feature.properties.active_rank} {feature.properties.name}
                 </p>
-                <p className="truncate text-xs text-slate-400">
+                <p className="truncate text-[10px] text-slate-400">
                   {feature.properties.arrondissement}
                 </p>
               </div>
-              <p className="text-sm font-bold">
+              <p className="text-[11px] font-semibold tabular-nums">
                 {formatScore(feature.properties.active_score)}
               </p>
             </div>
@@ -1058,7 +1280,7 @@ function ScoreBreakdown({
   showWeightContributions: boolean;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {pillarMeta.map((pillar) => {
         const score = feature[pillar.key];
         const share = effectiveWeight(weights, pillar.key);
@@ -1066,11 +1288,11 @@ function ScoreBreakdown({
           typeof score === "number" ? Number((score * share).toFixed(2)) : null;
 
         return (
-          <div key={pillar.key} className="rounded-[1.2rem] bg-slate-100/80 p-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
+          <div key={pillar.key} className="rounded-lg bg-slate-100/80 p-2">
+            <div className="mb-1 flex items-center justify-between gap-1.5">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{pillar.shortLabel}</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-[12px] font-semibold text-slate-900">{pillar.shortLabel}</p>
+                <p className="text-[10px] leading-snug text-slate-500">
                   {showWeightContributions ? (
                     <>
                       Weight {Math.round(share * 100)}% · contribution{" "}
@@ -1081,9 +1303,11 @@ function ScoreBreakdown({
                   )}
                 </p>
               </div>
-              <p className="text-sm font-bold text-slate-950">{formatScore(score)}</p>
+              <p className="text-[12px] font-semibold tabular-nums text-slate-950">
+                {formatScore(score)}
+              </p>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white">
+            <div className="h-1.5 overflow-hidden rounded-full bg-white">
               <div
                 className="h-full rounded-full"
                 style={{
@@ -1108,6 +1332,7 @@ function DetailsPanel({
   mainIndicator,
   selectedMetric,
   onClose,
+  onDismissPanel,
 }: {
   selected: ComputedProperties | null;
   topFeature: ComputedFeature | null;
@@ -1117,6 +1342,7 @@ function DetailsPanel({
   mainIndicator: MainIndicator;
   selectedMetric: MetricKey;
   onClose: () => void;
+  onDismissPanel: () => void;
 }) {
   const feature = selected ?? topFeature?.properties ?? null;
   const metricLabel = metricMeta[selectedMetric]?.label ?? "Score";
@@ -1135,31 +1361,31 @@ function DetailsPanel({
     : null;
 
   return (
-    <GlassCard className="max-h-[min(70vh,760px)] w-full overflow-y-auto rounded-t-4xl p-5 md:w-[430px] md:rounded-4xl">
-      <div className="flex items-start justify-between gap-4">
+    <GlassCard className="max-h-[min(62vh,640px)] w-full overflow-y-auto rounded-t-2xl p-3 md:w-[min(100%,320px)] md:rounded-2xl">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
             {selected ? "Selected area" : "Best current match"}
           </p>
-          <h2 className="mt-2 truncate text-2xl font-bold tracking-tight text-slate-950">
+          <h2 className="mt-1 truncate text-[15px] font-semibold leading-snug tracking-tight text-slate-950">
             {feature?.name ?? metricLabel}
           </h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
             {feature?.arrondissement ?? `${featureCount} mapped IRIS zones`}
           </p>
         </div>
-        {selected ? (
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <button
-            className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-200"
-            onClick={onClose}
+            className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-200"
+            onClick={selected ? onClose : onDismissPanel}
             type="button"
           >
             Close
           </button>
-        ) : null}
+        </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
+      <div className="mt-2.5 grid grid-cols-2 gap-1.5">
         <Metric
           label={metricLabel}
           tone="green"
@@ -1172,7 +1398,7 @@ function DetailsPanel({
         />
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-3">
+      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
         <Metric
           label={isVivabilite ? "Original" : "Avg"}
           value={formatScore(isVivabilite ? feature?.vivabilite_score : averageScore)}
@@ -1195,8 +1421,8 @@ function DetailsPanel({
         />
       </div>
 
-      <div className="mt-4 rounded-[1.4rem] border border-slate-200/80 bg-white/55 p-4">
-        <div className="flex items-center justify-between text-sm">
+      <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
+        <div className="flex items-center justify-between text-[11px]">
           <span className="text-slate-500">
             {feature?.geography === "arrondissement" ? "Level" : "Population"}
           </span>
@@ -1206,16 +1432,16 @@ function DetailsPanel({
               : formatNumber(feature?.population)}
           </span>
         </div>
-        <div className="mt-3 flex items-center justify-between text-sm">
+        <div className="mt-1.5 flex items-center justify-between text-[11px]">
           <span className="text-slate-500">
             {feature?.geography === "arrondissement" ? "Arrondissement code" : "IRIS code"}
           </span>
-          <span className="font-mono text-xs font-semibold text-slate-950">
+          <span className="font-mono text-[10px] font-semibold text-slate-950">
             {feature?.code_iris ?? feature?.code_arrondissement ?? "N/A"}
           </span>
         </div>
         {typeof feature?.loyer_median_m2 === "number" ? (
-          <div className="mt-3 flex items-center justify-between text-sm">
+          <div className="mt-1.5 flex items-center justify-between text-[11px]">
             <span className="text-slate-500">Median rent</span>
             <span className="font-semibold text-slate-950">
               {feature.loyer_median_m2.toFixed(1)} €/m²
@@ -1223,7 +1449,7 @@ function DetailsPanel({
           </div>
         ) : null}
         {typeof feature?.prix_m2 === "number" ? (
-          <div className="mt-3 flex items-center justify-between text-sm">
+          <div className="mt-1.5 flex items-center justify-between text-[11px]">
             <span className="text-slate-500">Median sale price</span>
             <span className="font-semibold text-slate-950">
               {formatNumber(feature.prix_m2)} €/m²
@@ -1231,7 +1457,7 @@ function DetailsPanel({
           </div>
         ) : null}
         {typeof feature?.densite_arbres === "number" ? (
-          <div className="mt-3 flex items-center justify-between text-sm">
+          <div className="mt-1.5 flex items-center justify-between text-[11px]">
             <span className="text-slate-500">Tree density</span>
             <span className="font-semibold text-slate-950">
               {feature.densite_arbres.toFixed(1)} trees/ha
@@ -1241,16 +1467,16 @@ function DetailsPanel({
       </div>
 
       {bestPillar && weakestPillar ? (
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div className="rounded-[1.2rem] bg-emerald-50 p-3">
-            <p className="text-xs font-medium text-emerald-700">Strongest pillar</p>
-            <p className="mt-1 text-sm font-bold text-slate-950">
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <div className="rounded-lg bg-emerald-50 p-2">
+            <p className="text-[9px] font-medium text-emerald-700">Strongest pillar</p>
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
               {bestPillar.shortLabel} · {formatScore(bestPillar.value)}
             </p>
           </div>
-          <div className="rounded-[1.2rem] bg-rose-50 p-3">
-            <p className="text-xs font-medium text-rose-700">Weakest pillar</p>
-            <p className="mt-1 text-sm font-bold text-slate-950">
+          <div className="rounded-lg bg-rose-50 p-2">
+            <p className="text-[9px] font-medium text-rose-700">Weakest pillar</p>
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
               {weakestPillar.shortLabel} · {formatScore(weakestPillar.value)}
             </p>
           </div>
@@ -1258,7 +1484,7 @@ function DetailsPanel({
       ) : null}
 
       {feature && isVivabilite ? (
-        <div className="mt-4">
+        <div className="mt-2.5">
           <ScoreBreakdown
             feature={feature}
             showWeightContributions={selectedMetric === "family_mix"}
@@ -1313,7 +1539,19 @@ export function EnhancedMapDashboard() {
     latitude: number;
   } | null>(null);
   const [showMapIntro, setShowMapIntro] = useState(false);
-  const [showLegendPanel, setShowLegendPanel] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [uiHidden, setUiHidden] = useState(false);
+  const [showTitleCard, setShowTitleCard] = useState(true);
+  const [showLegend, setShowLegend] = useState(true);
+  const [showDetails, setShowDetails] = useState(true);
+  const [showHoverPreview, setShowHoverPreview] = useState(true);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+
+  useEffect(() => {
+    if (uiHidden) {
+      setMobileSheetOpen(false);
+    }
+  }, [uiHidden]);
 
   useEffect(() => {
     let active = true;
@@ -1479,9 +1717,20 @@ export function EnhancedMapDashboard() {
   const hovered =
     displayData?.features.find((feature) => feature.properties.map_id === hoveredCode)
       ?.properties ?? null;
-  const popupFeature = selected ?? hovered;
-  const popupPosition = selected ? popup : hoverPopup;
+  const hoverAllowed = !uiHidden && showHoverPreview;
+  const popupFeature = uiHidden
+    ? null
+    : (selected ?? (hoverAllowed ? hovered : null));
+  const popupPosition = uiHidden
+    ? null
+    : selected
+      ? popup
+      : hoverAllowed
+        ? hoverPopup
+        : null;
   const activeCode = selectedCode ?? hoveredCode ?? "";
+  const sidebarMapInsetClass =
+    !uiHidden && sidebarExpanded ? "md:left-[336px]" : "md:left-16";
   const schoolShare = Math.round(effectiveWeight(weights, "school_score") * 100);
   const showTransportMarkers = mainIndicator === "transport";
   const showWeightStudio = mainIndicator === "vivabilite" && selectedMetric === "family_mix";
@@ -1584,6 +1833,7 @@ export function EnhancedMapDashboard() {
     setPopup({ longitude: event.lngLat.lng, latitude: event.lngLat.lat });
     setSelectedTransportPoint(null);
     setTransportPopup(null);
+    setShowDetails(true);
   }
 
   function changeMainIndicator(indicator: MainIndicator) {
@@ -1615,37 +1865,49 @@ export function EnhancedMapDashboard() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#f5f5f7] text-slate-950">
+    <main className="relative min-h-screen overflow-hidden bg-[#f5f5f7] font-[ui-sans-serif,-apple-system,BlinkMacSystemFont,'SF_Pro_Text',Inter,system-ui] text-slate-950 antialiased">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 z-0 hidden h-full w-[min(480px,45vw)] bg-[radial-gradient(ellipse_at_0%_20%,rgba(16,185,129,0.06),transparent_55%)] md:block"
+      />
       <div className="absolute inset-x-0 top-0 z-20 md:bottom-0 md:left-0 md:right-auto">
         <Sidebar
           averageScore={stats.averageScore}
           arrondissementFilter={arrondissementFilter}
           arrondissementOptions={arrondissementOptions}
+          expanded={sidebarExpanded}
           featureCount={stats.featureCount}
           mainIndicator={mainIndicator}
           minScore={minScore}
+          mobileSheetOpen={mobileSheetOpen}
           onArrondissementFilterChange={setArrondissementFilter}
           onMainIndicatorChange={changeMainIndicator}
           onMinScoreChange={setMinScore}
+          onMobileSheetOpenChange={setMobileSheetOpen}
           onQueryChange={setQuery}
           onRankingSelect={(id) => {
             setSelectedCode(id);
             setPopup(null);
             setSelectedTransportPoint(null);
             setTransportPopup(null);
+            setShowDetails(true);
           }}
           onSubMetricChange={changeMetric}
+          onToggleExpanded={() => setSidebarExpanded((v) => !v)}
           onTransportTypeToggle={toggleTransportType}
           query={query}
           ranking={stats.topFeatures}
           selectedSubMetric={selectedMetric}
           schoolShare={schoolShare}
           transportTypeCounts={transportTypeCounts}
+          uiHidden={uiHidden}
           visibleTransportTypes={visibleTransportTypes}
         />
       </div>
 
-      <div className="absolute inset-0 pt-[190px] md:left-72 md:pt-0">
+      <div
+        className={`absolute inset-0 z-0 pt-[52px] md:pt-0 ${sidebarMapInsetClass}`}
+      >
         <Map
           initialViewState={initialViewState}
           interactiveLayerIds={[
@@ -1655,15 +1917,16 @@ export function EnhancedMapDashboard() {
           ]}
           mapStyle={mapStyle}
           mapboxAccessToken={mapboxToken}
-          maxBounds={parisMaxBounds}
+          maxBounds={ileDeFranceMaxBounds}
           maxZoom={20}
-          minZoom={8.5}
+          minZoom={6}
           onClick={handleClick}
           onMouseLeave={handleMouseLeave}
           onMouseMove={handleMouseMove}
           reuseMaps
           style={{ height: "100%", width: "100%" }}
         >
+          <NavigationControl position="bottom-right" />
           {displayData ? (
             <Source data={displayData} id="vivabilite-source" type="geojson">
               <Layer {...fillLayer} />
@@ -1695,34 +1958,34 @@ export function EnhancedMapDashboard() {
               closeOnClick={false}
               latitude={popupPosition.latitude}
               longitude={popupPosition.longitude}
-              offset={22}
+              offset={12}
               onClose={() => {
                 setSelectedCode(null);
                 setPopup(null);
               }}
             >
-              <div className="min-w-64 p-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  {selected ? "Selected area" : "Hover preview"}
+              <div className="max-w-[200px] p-1.5">
+                <p className="text-[8px] font-semibold uppercase tracking-wide text-emerald-700">
+                  {selected ? "Selected" : "Preview"}
                 </p>
-                <p className="mt-1 text-base font-bold text-slate-950">
+                <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-950">
                   {popupFeature.name}
                 </p>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-2xl bg-emerald-50 p-2">
-                    <p className="text-[11px] font-medium text-emerald-700">Score</p>
-                    <p className="font-bold text-slate-950">
+                <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
+                  <div className="rounded-md bg-emerald-50 px-1.5 py-1">
+                    <p className="text-[8px] font-medium text-emerald-700">Score</p>
+                    <p className="font-semibold tabular-nums text-slate-950">
                       {formatScore(popupFeature.active_score)}
                     </p>
                   </div>
-                  <div className="rounded-2xl bg-slate-100 p-2">
-                    <p className="text-[11px] font-medium text-slate-500">Rank</p>
-                    <p className="font-bold text-slate-950">
+                  <div className="rounded-md bg-slate-100 px-1.5 py-1">
+                    <p className="text-[8px] font-medium text-slate-500">Rank</p>
+                    <p className="font-semibold tabular-nums text-slate-950">
                       #{popupFeature.active_rank}
                     </p>
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-1 line-clamp-1 text-[9px] text-slate-500">
                   {popupFeature.arrondissement} ·{" "}
                   {popupFeature.code_iris ?? popupFeature.code_arrondissement}
                 </p>
@@ -1737,16 +2000,16 @@ export function EnhancedMapDashboard() {
               closeOnClick={false}
               latitude={transportPopup.latitude}
               longitude={transportPopup.longitude}
-              offset={18}
+              offset={10}
               onClose={() => {
                 setSelectedTransportPoint(null);
                 setTransportPopup(null);
               }}
             >
-              <div className="min-w-64 p-3">
-                <div className="flex items-center gap-3">
+              <div className="max-w-[220px] p-1.5">
+                <div className="flex items-center gap-2">
                   <span
-                    className="grid h-10 w-10 place-items-center rounded-full text-xs font-black text-white"
+                    className="grid h-7 w-7 place-items-center rounded-full text-[9px] font-bold text-white"
                     style={{
                       backgroundColor: getTransportMeta(selectedTransportPoint.type).color,
                     }}
@@ -1754,15 +2017,15 @@ export function EnhancedMapDashboard() {
                     {selectedTransportPoint.icon_label}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-base font-bold text-slate-950">
+                    <p className="truncate text-[11px] font-semibold leading-snug text-slate-950">
                       {selectedTransportPoint.name}
                     </p>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
                       {selectedTransportPoint.display_type}
                     </p>
                   </div>
                 </div>
-                <div className="mt-3 rounded-2xl bg-slate-100 p-3 text-xs text-slate-600">
+                <div className="mt-1.5 rounded-lg bg-slate-100 px-1.5 py-1 text-[9px] text-slate-600">
                   Lat {selectedTransportPoint.lat.toFixed(5)} · Lng{" "}
                   {selectedTransportPoint.lng.toFixed(5)}
                 </div>
@@ -1772,71 +2035,126 @@ export function EnhancedMapDashboard() {
         </Map>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[190px] z-10 flex flex-col justify-between gap-4 overflow-y-auto p-4 md:left-72 md:top-0 md:p-6">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <GlassCard className="pointer-events-auto max-w-2xl rounded-3xl p-4 md:rounded-4xl md:p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                Urban Data Explorer
-              </span>
-              <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-500">
-                {metricLabel}
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap items-end gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-950 md:text-4xl">
-                {mainLabel} — Paris
-              </h1>
-              <button
-                className="rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-white"
-                onClick={() => setShowMapIntro((open) => !open)}
-                type="button"
-              >
-                {showMapIntro ? "Hide" : "About"}
-              </button>
-            </div>
-            {showMapIntro ? (
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
-                Choose a main indicator, then inspect its sub-indicators. Vivabilité
-                combines family pillars, Transport adds project stop data, Thermal
-                Comfort maps trees and cooling areas, and Housing shows affordability
-                by arrondissement.
-              </p>
-            ) : null}
-            {transportError && mainIndicator === "transport" ? (
-              <p className="mt-2 rounded-2xl bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                Transport points unavailable: {transportError}
-              </p>
-            ) : null}
-          </GlassCard>
-
-          <div className="flex items-start gap-2">
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-0 top-[52px] z-10 flex flex-col justify-between gap-2 overflow-y-auto p-2.5 md:top-0 md:p-4 ${sidebarMapInsetClass}`}
+      >
+        <div
+          aria-label="Map display options"
+          className="pointer-events-auto fixed right-3 top-14 z-25 flex max-w-[min(calc(100vw-1.5rem),280px)] flex-wrap items-center justify-end gap-1.5 md:right-4 md:top-4"
+        >
+          <button
+            className="rounded-full border border-slate-900/8 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-800 shadow-[0_2px_12px_rgba(15,23,42,0.12)] backdrop-blur-md hover:bg-white"
+            onClick={() => setUiHidden((v) => !v)}
+            type="button"
+          >
+            {uiHidden ? "Show UI" : "Hide UI"}
+          </button>
+          {!uiHidden && !showLegend ? (
             <button
-              className="pointer-events-auto rounded-full border border-slate-200/90 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur md:hidden"
-              onClick={() => setShowLegendPanel((o) => !o)}
+              className="rounded-full border border-slate-900/8 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-[0_2px_12px_rgba(15,23,42,0.12)] backdrop-blur-md hover:bg-white"
+              onClick={() => setShowLegend(true)}
               type="button"
             >
-              {showLegendPanel ? "Hide key" : "Score key"}
+              Score key
             </button>
-            {showLegendPanel ? (
-              <div className="pointer-events-auto w-72 max-w-[85vw] md:hidden">
-                <Legend label={metricLabel} />
+          ) : null}
+          {!uiHidden && !showDetails ? (
+            <button
+              className="rounded-full border border-slate-900/8 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-[0_2px_12px_rgba(15,23,42,0.12)] backdrop-blur-md hover:bg-white"
+              onClick={() => setShowDetails(true)}
+              type="button"
+            >
+              Show details
+            </button>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex flex-1 flex-col gap-1.5 md:pr-36 xl:pr-44">
+            {!uiHidden && showTitleCard ? (
+              <GlassCard className="pointer-events-auto max-w-xl rounded-2xl p-2.5 md:p-3">
+                <div className="flex flex-wrap items-center gap-1">
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700 ring-1 ring-emerald-600/15">
+                    Urban Data Explorer
+                  </span>
+                  <span className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-medium text-slate-500 ring-1 ring-slate-900/5">
+                    {metricLabel}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-end gap-1.5">
+                  <h1 className="text-base font-semibold tracking-tight text-slate-950 md:text-lg">
+                    {mainLabel} — Paris
+                  </h1>
+                  <div className="flex items-center gap-1">
+                    <button
+                      className="rounded-full border border-slate-900/8 bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.06)] hover:bg-white"
+                      onClick={() => setShowMapIntro((open) => !open)}
+                      type="button"
+                    >
+                      {showMapIntro ? "Hide" : "About"}
+                    </button>
+                    <button
+                      aria-label="Close title card"
+                      className="rounded-full px-1.5 py-0.5 text-[13px] font-medium leading-none text-slate-500 hover:bg-slate-100"
+                      onClick={() => setShowTitleCard(false)}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                {showMapIntro ? (
+                  <p className="mt-1.5 max-w-xl text-[11px] leading-snug text-slate-600">
+                    Choose a main indicator, then inspect its sub-indicators. Vivabilité
+                    combines family pillars, Transport adds project stop data, Thermal
+                    Comfort maps trees and cooling areas, and Housing shows affordability
+                    by arrondissement.
+                  </p>
+                ) : null}
+                {transportError && mainIndicator === "transport" ? (
+                  <p className="mt-2 rounded-xl bg-rose-50 px-2.5 py-1.5 text-[11px] font-semibold text-rose-700">
+                    Transport points unavailable: {transportError}
+                  </p>
+                ) : null}
+              </GlassCard>
+            ) : null}
+            {!uiHidden && !showTitleCard ? (
+              <button
+                className="pointer-events-auto w-fit rounded-full border border-slate-900/8 bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+                onClick={() => setShowTitleCard(true)}
+                type="button"
+              >
+                Info
+              </button>
+            ) : null}
+          </div>
+
+          <div
+            className={`flex flex-col items-stretch gap-2 xl:items-end ${
+              !uiHidden && showLegend ? "pt-10 xl:pt-11" : ""
+            }`}
+          >
+            {!uiHidden && showLegend ? (
+              <div className="pointer-events-auto w-full max-w-[220px] xl:w-60">
+                <Legend
+                  label={metricLabel}
+                  onClose={() => setShowLegend(false)}
+                  onShowHoverPreviewChange={setShowHoverPreview}
+                  showHoverPreview={showHoverPreview}
+                />
               </div>
             ) : null}
-            <div className="pointer-events-auto hidden w-80 md:block">
-              <Legend label={metricLabel} />
-            </div>
           </div>
         </div>
 
         <div
-          className={`grid gap-4 xl:items-end ${
-            showWeightStudio
-              ? "xl:grid-cols-[minmax(0,380px)_1fr_minmax(0,430px)]"
+          className={`grid gap-2 xl:items-end ${
+            showWeightStudio && !uiHidden
+              ? "xl:grid-cols-[minmax(0,340px)_1fr_minmax(0,320px)]"
               : "xl:grid-cols-1"
           }`}
         >
-          {showWeightStudio ? (
+          {showWeightStudio && !uiHidden ? (
             <div className="pointer-events-auto order-2 xl:order-1">
               <WeightPanel
                 onChange={updateWeight}
@@ -1846,36 +2164,41 @@ export function EnhancedMapDashboard() {
               />
             </div>
           ) : null}
-          {showWeightStudio ? (
+          {showWeightStudio && !uiHidden ? (
             <div className="pointer-events-none hidden min-h-0 xl:order-2 xl:block" aria-hidden />
           ) : null}
           <div
             className={`pointer-events-auto order-1 xl:order-3 ${
-              showWeightStudio ? "" : "xl:max-w-md xl:justify-self-end 2xl:max-w-[430px]"
+              showWeightStudio && !uiHidden
+                ? ""
+                : "xl:max-w-[320px] xl:justify-self-end"
             }`}
           >
-            <DetailsPanel
-              averageScore={stats.averageScore}
-              featureCount={stats.featureCount}
-              mainIndicator={mainIndicator}
-              onClose={() => {
-                setSelectedCode(null);
-                setPopup(null);
-              }}
-              selected={selected}
-              selectedMetric={selectedMetric}
-              topFeature={stats.topFeature}
-              weights={weights}
-            />
+            {!uiHidden && showDetails ? (
+              <DetailsPanel
+                averageScore={stats.averageScore}
+                featureCount={stats.featureCount}
+                mainIndicator={mainIndicator}
+                onClose={() => {
+                  setSelectedCode(null);
+                  setPopup(null);
+                }}
+                onDismissPanel={() => setShowDetails(false)}
+                selected={selected}
+                selectedMetric={selectedMetric}
+                topFeature={stats.topFeature}
+                weights={weights}
+              />
+            ) : null}
           </div>
         </div>
       </div>
 
       {loading ? (
         <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/25 p-6 backdrop-blur-sm">
-          <GlassCard className="rounded-4xl p-6 text-center">
-            <p className="text-sm font-semibold text-slate-950">Loading map data</p>
-            <p className="mt-2 text-sm text-slate-500">
+          <GlassCard className="rounded-3xl p-5 text-center">
+            <p className="text-[13px] font-semibold text-slate-950">Loading map data</p>
+            <p className="mt-1.5 text-[13px] text-slate-500">
               Fetching {mainLabel.toLowerCase()} polygons and scores...
             </p>
           </GlassCard>
@@ -1884,15 +2207,15 @@ export function EnhancedMapDashboard() {
 
       {error ? (
         <div className="absolute inset-0 z-30 grid place-items-center bg-slate-950/70 p-6 backdrop-blur">
-          <GlassCard className="max-w-lg rounded-4xl p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-red-600">
+          <GlassCard className="max-w-lg rounded-3xl p-5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-red-600">
               Map data unavailable
             </p>
-            <h2 className="mt-2 text-2xl font-bold text-slate-950">
+            <h2 className="mt-2 text-xl font-semibold text-slate-950">
               Start the API and generate the gold indicators first
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">{error}</p>
-            <div className="mt-4 rounded-2xl bg-slate-100 p-4 font-mono text-xs text-slate-700">
+            <p className="mt-2 text-[13px] leading-5 text-slate-600">{error}</p>
+            <div className="mt-3 rounded-xl bg-slate-100 p-3 font-mono text-[11px] text-slate-700">
               python run_pipeline.py --gold
               <br />
               python run_api.py
