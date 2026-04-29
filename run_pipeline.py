@@ -24,6 +24,9 @@ from src.gold.transport_score import (
     compute_transport_indicator_score,
     compute_transport_score,
 )
+from src.gold.build_bdcom_pipeline import process_bdcom_gold
+from src.gold.dvf import process_dvf_gold
+
 from src.gold.transport_points import compute_transport_points
 from src.gold.vivabilite_familiale import compute_vivabilite_familiale
 from src.silver.bdcom import process_bdcom
@@ -82,7 +85,8 @@ def run_gold() -> None:
     process_thermal_comfort_gold()
     process_sale_price_median_to_gold()
     process_rent_data_to_gold()
-
+    process_bdcom_gold()
+    process_dvf_gold()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the indice familiale pipeline.")

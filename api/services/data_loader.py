@@ -17,6 +17,8 @@ import geopandas as gpd
 import pandas as pd
 
 from src.config import (
+    BDCOM_GOLD,
+    DVF_GOLD,
     IRIS_GEOJSON,
     POPULATION_SILVER,
     RENT_PRICE_GOLD,
@@ -47,6 +49,8 @@ class DataStore:
         population:   Silver-layer DataFrame (861 rows) – residential IRIS zones
             with 2019 census population.
         vivabilite_scores: Gold composite family-liveability score per IRIS.
+        bdcom_scores: Gold BDCOM commercial establishments per IRIS.
+        dvf_scores: Gold DVF housing transactions per IRIS.
     """
 
     iris_scores: pd.DataFrame
@@ -58,6 +62,8 @@ class DataStore:
     thermal_comfort_scores: gpd.GeoDataFrame
     rent_price_scores: gpd.GeoDataFrame
     sale_price_scores: gpd.GeoDataFrame
+    bdcom_scores: pd.DataFrame
+    dvf_scores: pd.DataFrame
     iris_geojson: dict[str, Any]
 
     # ------------------------------------------------------------------
@@ -163,6 +169,24 @@ class DataStore:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", SALE_PRICE_GOLD)
             sale_price_scores = gpd.GeoDataFrame()
 
+        if BDCOM_GOLD.exists():
+            logger.info("Loading gold: %s", BDCOM_GOLD.name)
+            bdcom_scores = pd.read_csv(BDCOM_GOLD, dtype={"code_iris": str})
+            bdcom_scores["code_iris"] = bdcom_scores["code_iris"].str.zfill(9)
+            logger.info("  → %d IRIS zones loaded", len(bdcom_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py`", BDCOM_GOLD)
+            bdcom_scores = pd.DataFrame()
+
+        if DVF_GOLD.exists():
+            logger.info("Loading gold: %s", DVF_GOLD.name)
+            dvf_scores = pd.read_csv(DVF_GOLD, dtype={"code_iris": str})
+            dvf_scores["code_iris"] = dvf_scores["code_iris"].str.zfill(9)
+            logger.info("  → %d IRIS zones loaded", len(dvf_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py`", DVF_GOLD)
+            dvf_scores = pd.DataFrame()
+
         return cls(
             iris_scores=_clean_df(iris_scores),
             schools=_clean_df(schools),
@@ -173,5 +197,7 @@ class DataStore:
             thermal_comfort_scores=thermal_comfort_scores,
             rent_price_scores=rent_price_scores,
             sale_price_scores=sale_price_scores,
+            bdcom_scores=_clean_df(bdcom_scores),
+            dvf_scores=_clean_df(dvf_scores),
             iris_geojson=iris_geojson,
         )

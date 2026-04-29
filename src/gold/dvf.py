@@ -1,43 +1,57 @@
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import MinMaxScaler, OneHotEncoder  # ← MinMaxScaler
-import numpy as np
-import pandas as pd
+import logging
 from pathlib import Path
 
+import pandas as pd
 
-def export_to_gold(df: pd.DataFrame, name: str = 'dvf') -> None:
-    outdir = Path('data/gold')
+from src.config import DVF_SILVER, GOLD
+
+logger = logging.getLogger(__name__)
+
+
+def export_to_gold(df: pd.DataFrame, name: str = 'dvf') -> Path:
+    """Export dataframe to gold layer CSV and return the path."""
+    outdir = GOLD
     outdir.mkdir(parents=True, exist_ok=True)
     csv_path = outdir / f"{name}.csv"
-    df.to_csv(csv_path, index=False)
-    print(f"\nExported to {csv_path}")
+    df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    logger.info(f"Exported {len(df)} records to {csv_path}")
+    return csv_path
 
 
-def build_dvf_pipeline(
-    df: pd.DataFrame,
-    numeric_cols=None,
-    categorical_cols=None,
-):
-    if numeric_cols is None:
-        numeric_cols = ['surface_m2', 'prix_m2', 'valeur_fonciere', 'annee', 'mois']
-    if categorical_cols is None:
-        categorical_cols = ['arrondissement', 'type_local']
+def process_dvf_gold() -> pd.DataFrame:
+    """
+    Read DVF silver data, compute aggregated statistics, and export to gold.
 
-    # --- clean numeric columns: impute missing with median, keep original scale ---
+    This creates summary views of housing transactions in Paris
+    suitable for dashboard display (price trends, volume by arrondissement, etc.).
+    """
+    logger.info(f"Loading DVF silver: {DVF_SILVER.name}")
+
+    if not DVF_SILVER.exists():
+        raise FileNotFoundError(f"DVF silver file not found: {DVF_SILVER}")
+
+    df = pd.read_csv(DVF_SILVER)
+    logger.info(f"Loaded {len(df):,} transactions from silver")
+
+    # === Numeric cleaning ===
+    numeric_cols = ['surface_m2', 'prix_m2', 'valeur_fonciere', 'annee', 'mois', 'nb_pieces']
     for col in numeric_cols:
         if col in df.columns:
-            median_val = df[col].median()
-            df[col] = df[col].fillna(median_val)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            if df[col].isnull().any():
+                median_val = df[col].median()
+                if pd.notna(median_val):
+                    df[col] = df[col].fillna(median_val)
 
-    # --- clean categorical columns: impute missing with most frequent ---
+    # === Categorical cleaning ===
+    categorical_cols = ['arrondissement', 'type_local', 'nature_culture', 'nature_mutation']
     for col in categorical_cols:
-        if col in df.columns:
-            most_frequent = df[col].mode()[0]
-            df[col] = df[col].fillna(most_frequent)
+        if col in df.columns and df[col].isnull().any():
+            mode_val = df[col].mode()
+            if len(mode_val) > 0:
+                df[col] = df[col].fillna(mode_val[0])
 
-    # --- derived columns: useful aggregations ---
+    # === Derived columns ===
     if 'valeur_fonciere' in df.columns and 'surface_m2' in df.columns:
         df['prix_m2'] = (df['valeur_fonciere'] / df['surface_m2']).round(2)
 
@@ -47,32 +61,32 @@ def build_dvf_pipeline(
             format='%Y-%m', errors='coerce'
         )
 
-    # --- summary stats printed for quick insight ---
-    print("=== Shape ===")
-    print(df.shape)
-
-    print("\n=== Missing values ===")
+    # === Summary statistics ===
+    logger.info(f"Shape: {df.shape}")
     missing = df.isnull().sum()
-    print(missing[missing > 0] if missing.any() else "None")
+    if missing.any():
+        logger.info(f"Missing values:\n{missing[missing > 0]}")
 
-    print("\n=== Numeric summary ===")
-    print(df[numeric_cols].describe().round(2))
+    logger.info(f"Numeric summary:\n{df[numeric_cols].describe().round(2)}")
 
-    print("\n=== Top arrondissements by avg prix_m2 ===")
     if 'arrondissement' in df.columns and 'prix_m2' in df.columns:
-        print(
-            df.groupby('arrondissement')['prix_m2']
-            .mean().round(2)
-            .sort_values(ascending=False)
-            .head(10)
-        )
+        logger.info(f"Top arrondissements by avg prix_m2:\n{df.groupby('arrondissement')['prix_m2'].mean().round(2).sort_values(ascending=False).head(10)}")
 
-    print("\n=== Transaction count by type_local ===")
     if 'type_local' in df.columns:
-        print(df['type_local'].value_counts())
+        logger.info(f"Transaction count by type_local:\n{df['type_local'].value_counts()}")
 
+    if 'annee' in df.columns:
+        logger.info(f"Transaction count by year:\n{df['annee'].value_counts().sort_index()}")
+
+    if 'prix_m2' in df.columns:
+        logger.info(f"Median prix_m2: {df['prix_m2'].median():,.0f} €")
+        logger.info(f"Median surface_m2: {df['surface_m2'].median():,.0f} m²")
+
+    # Export to gold
     export_to_gold(df, name='dvf')
+
     return df
+
 
 if __name__ == "__main__":
     try:
@@ -82,7 +96,6 @@ if __name__ == "__main__":
         dvf_silver_path = Path("data/silver/dvf_paris_clean.csv")
         df = pd.read_csv(dvf_silver_path)
 
-
-    df_out = build_dvf_pipeline(df)
+    df_out = process_dvf_gold()
     print(df_out.shape)
     print(df_out.head())
