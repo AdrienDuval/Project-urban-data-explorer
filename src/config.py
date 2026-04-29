@@ -48,8 +48,9 @@ QUARTIERS_KML           = BRONZE / "rent_data" / "L7501_zone_elem_2024.kml"
 MAPPING_ZONES_XLSX      = BRONZE / "rent_data" / "table_zones_2024_L7501_1.xls"
 RENT_DATA_CSV           = BRONZE / "rent_data" / "Base_OP_2024_L7501.csv"
 
-# Share of population by SPC (Socio-professional category) in each IRIS 
-POP_DATA_SPC_RAW        = BRONZE / "pop_spc" / "base-ic-evol-struct-pop-2022.csv"
+# demographics and socio-economics data
+DEMO_REVENUE_BRONZE     = BRONZE / "demographics" / "BASE_TD_FILO_IRIS_2021_DEC.csv"
+DEMO_CSP_BRONZE         = BRONZE / "demographics" / "base-ic-evol-struct-pop-2022.CSV"
 
 # ── Silver outputs ─────────────────────────────────────────────────────────────
 IRIS_SILVER       = SILVER / "iris_paris.csv"
@@ -64,6 +65,8 @@ ESPACES_VERTS_SILVER = SILVER / "espaces_verts_paris.geojson"
 THERMAL_COMFORT_SILVER = SILVER / "thermal_comfort_base.geojson"
 SALE_PRICE_SILVER = SILVER / "sale_price_m2.csv"
 RENT_PRICE_SILVER = SILVER / "rent_data_complet.csv"
+
+DEMO_SILVER       = SILVER / "demographics_paris.csv"
 
 # ── DVF filter settings ────────────────────────────────────────────────────────
 DVF_TYPES_TO_KEEP = ["Appartement", "Maison"]
@@ -96,6 +99,8 @@ HEALTHCARE_SCORE_GOLD    = GOLD / "healthcare_score_iris.csv"
 DAILY_SERVICES_SCORE_GOLD = GOLD / "daily_services_score_iris.csv"
 FAMILY_FACTORS_GOLD      = GOLD / "family_missing_factors_iris.csv"
 VIVABILITE_GOLD          = GOLD / "vivabilite_familiale_iris.csv"
+DEMO_GOLD                = GOLD / "demographics_gold.csv"
+
 # ── Pipeline settings ──────────────────────────────────────────────────────────
 # Radius (metres) around each IRIS centroid used to count nearby schools/stops
 BUFFER_METERS = 500
