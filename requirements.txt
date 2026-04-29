@@ -1,3 +1,5 @@
+scikit-learn
+numpy
 # six: required by python-dateutil (pandas); pin recent version — very old six
 # (e.g. 1.11) can break `from six.moves import _thread` on modern Python.
 six>=1.16.0
