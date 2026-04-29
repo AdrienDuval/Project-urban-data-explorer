@@ -163,6 +163,20 @@ class DataStore:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", SALE_PRICE_GOLD)
             sale_price_scores = gpd.GeoDataFrame()
 
+        if THERMAL_COMFORT_GOLD.exists():
+            logger.info("Loading gold: %s", THERMAL_COMFORT_GOLD.name)
+            # Utilise read_parquet au lieu de read_csv
+            thermal_comfort_scores = gpd.read_parquet(THERMAL_COMFORT_GOLD)
+            if "code_iris" in thermal_comfort_scores.columns:
+                thermal_comfort_scores["code_iris"] = (
+                    thermal_comfort_scores["code_iris"].astype(str).str.zfill(9)
+                )
+            logger.info("- %d thermal comfort zones loaded", len(thermal_comfort_scores))
+        else:
+            logger.warning("Gold file not found: %s", THERMAL_COMFORT_GOLD)
+            thermal_comfort_scores = gpd.GeoDataFrame()
+
+
         return cls(
             iris_scores=_clean_df(iris_scores),
             schools=_clean_df(schools),
