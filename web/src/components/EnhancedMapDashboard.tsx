@@ -19,6 +19,7 @@ import {
   fetchTransportPoints,
   fetchVivabiliteArrondissement,
   fetchVivabiliteMap,
+  fetchDemographicsMap,
   getAnalyticsUserKey,
   recordZoneClick,
 } from "@/lib/api";
@@ -39,7 +40,7 @@ type WeightKey =
   | "daily_services_score"
   | "green_spaces_score";
 
-type MainIndicator = "vivabilite" | "transport" | "thermal" | "housing";
+type MainIndicator = "vivabilite" | "transport" | "thermal" | "housing" | "demographics";
 
 type MetricKey =
   | "vivabilite_score"
@@ -49,7 +50,9 @@ type MetricKey =
   | "tree_density_score"
   | "cooling_area_score"
   | "rent_score"
-  | "sale_score";
+  | "sale_score"
+  | "score_revenus"
+  | "proximity_score";
 
 type Weights = Record<WeightKey, number>;
 
@@ -208,6 +211,12 @@ const mainIndicatorOptions: Array<{
     description: "Rent and sale affordability at arrondissement level.",
     abbr: "LG",
   },
+{
+  key: "demographics",
+  label: "Démographie",
+  description: "Revenus, CSP et mixité sociale par IRIS.",
+  abbr: "DM",
+},
 ];
 
 function MainIndicatorGlyph({ indicator }: { indicator: MainIndicator }) {
@@ -243,6 +252,14 @@ function MainIndicatorGlyph({ indicator }: { indicator: MainIndicator }) {
       return (
         <svg aria-hidden className="h-4 w-4" viewBox="0 0 16 16">
           <path d="M2 7l6-4.5L14 7v7H2V7zM6 14V9h4v5" {...line} />
+        </svg>
+      );
+    case "demographics":
+      return (
+        <svg aria-hidden className="h-4 w-4" viewBox="0 0 16 16">
+          <circle cx="5" cy="5" r="2" fill="none" stroke={stroke} strokeWidth={1.35} />
+          <circle cx="11" cy="5" r="2" fill="none" stroke={stroke} strokeWidth={1.35} />
+          <path d="M1 13c0-2.2 1.8-4 4-4s4 1.8 4 4M9 9c1-.6 2.2-.8 3 0 1.5.8 2.5 2.2 3 4" {...line} />
         </svg>
       );
     default:
@@ -298,6 +315,11 @@ const subMetricOptions: Record<
       label: "Cooling areas",
       description: "Share of cool green areas by IRIS.",
     },
+    {
+      key: "proximity_score",
+      label: "Proximity score",
+      description: "Proximity to cooling areas within 800m radius.",
+  },
   ],
   housing: [
     {
@@ -309,6 +331,13 @@ const subMetricOptions: Record<
       key: "sale_score",
       label: "Sale affordability",
       description: "Median sale €/m², inverted so higher means more affordable.",
+    },
+  ],
+  demographics: [
+    {
+      key: "score_revenus",
+      label: "Revenus",
+      description: "Revenu médian par IRIS, normalisé 0-10.",
     },
   ],
 };
@@ -1357,6 +1386,63 @@ function DetailsPanel({
         </div>
       </div>
 
+      <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+        <Metric
+          label={metricLabel}
+          tone="green"
+          value={formatScore(feature?.active_score ?? averageScore)}
+        />
+        <Metric
+          label="Dynamic rank"
+          tone="dark"
+          value={feature?.active_rank ? `#${feature.active_rank}` : "N/A"}
+        />
+      </div>
+
+      <div className={`mt-1.5 grid gap-1.5 ${mainIndicator === "thermal" ? "grid-cols-2" : "grid-cols-3"}`}>
+        <Metric
+          label={isVivabilite ? "Original" : "Avg"}
+          value={formatScore(isVivabilite ? feature?.vivabilite_score : averageScore)}
+        />
+        {mainIndicator !== "thermal" ? (
+          <Metric
+            label="Delta"
+            value={
+              typeof feature?.score_delta === "number"
+                ? `${feature.score_delta >= 0 ? "+" : ""}${feature.score_delta.toFixed(1)}`
+                : "N/A"
+            }
+          />
+            ) : null}
+            <Metric
+              label="Percentile"
+              value={
+                typeof feature?.active_percentile === "number"
+                  ? `${feature.active_percentile}%`
+                  : "N/A"
+              }
+            />
+          </div>
+
+      <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
+        {mainIndicator !== "thermal" ? (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-slate-500">
+              {feature?.geography === "arrondissement" ? "Level" : "Population"}
+            </span>
+            <span className="font-semibold text-slate-950">
+              {feature?.geography === "arrondissement"
+                ? "Arrondissement"
+                : formatNumber(feature?.population)}
+            </span>
+          </div>
+        ) : null}
+        {typeof feature?.loyer_median_m2 === "number" ? (
+          <div className="mt-1.5 flex items-center justify-between text-[11px]">
+            <span className="text-slate-500">Median rent</span>
+            <span className="font-semibold text-slate-950">
+              {feature.loyer_median_m2.toFixed(1)} €/m²
+            </span>
       {feature?.no_data ? (
         /* ── No-data zone: show reason instead of blank metrics ── */
         <>
@@ -1396,6 +1482,86 @@ function DetailsPanel({
               </span>
             </div>
           </div>
+        ) : null}
+        {mainIndicator === "thermal" ? (
+          <>
+            {typeof feature?.densite_arbres === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Tree density</span>
+                <span className="font-semibold text-slate-950">
+                  {feature.densite_arbres.toFixed(1)} trees/ha
+                </span>
+              </div>
+            ) : null}
+            {typeof (feature as any)?.cooling_area_score === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Cooling area score</span>
+                <span className="font-semibold text-slate-950">
+                  {formatScore((feature as any).cooling_area_score)}
+                </span>
+              </div>
+            ) : null}
+            {typeof (feature as any)?.proximity_score === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Proximity score</span>
+                <span className="font-semibold text-slate-950">
+                  {formatScore((feature as any).proximity_score)}
+                </span>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          typeof feature?.densite_arbres === "number" ? (
+            <div className="mt-1.5 flex items-center justify-between text-[11px]">
+              <span className="text-slate-500">Tree density</span>
+              <span className="font-semibold text-slate-950">
+                {feature.densite_arbres.toFixed(1)} trees/ha
+              </span>
+            </div>
+          ) : null
+        )}
+      </div>
+
+      {mainIndicator === "demographics" && typeof (feature as any)?.revenu_median === "number" ? (
+        <div className="mt-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-slate-500">Revenu médian</span>
+          <span className="font-semibold text-slate-950">
+            {formatNumber((feature as any).revenu_median)} €/an
+          </span>
+        </div>
+      ) : null}
+      {mainIndicator === "demographics" && typeof (feature as any)?.gini === "number" ? (
+        <div className="mt-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-slate-500">Indice de Gini</span>
+          <span className="font-semibold text-slate-950">
+            {((feature as any).gini as number).toFixed(3)}
+          </span>
+        </div>
+      ) : null}
+      {mainIndicator === "demographics" && typeof (feature as any)?.pct_cadres === "number" ? (
+        <div className="mt-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-slate-500">% cadres</span>
+          <span className="font-semibold text-slate-950">
+            {((feature as any).pct_cadres as number).toFixed(1)}%
+          </span>
+        </div>
+      ) : null}
+      {mainIndicator === "demographics" && typeof (feature as any)?.taux_pauvrete === "number" ? (
+        <div className="mt-1.5 flex items-center justify-between text-[11px]">
+          <span className="text-slate-500">Taux de pauvreté</span>
+          <span className="font-semibold text-slate-950">
+            {((feature as any).taux_pauvrete as number).toFixed(1)}%
+          </span>
+        </div>
+      ) : null}
+
+      {bestPillar && weakestPillar ? (
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <div className="rounded-lg bg-blue-50 p-2">
+            <p className="text-[9px] font-medium text-[#007AFF]">Strongest pillar</p>
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
+              {bestPillar.shortLabel} · {formatScore(bestPillar.value)}
+            </p>
         </>
       ) : (
         /* ── Scored zone: full metrics ── */
@@ -1523,6 +1689,7 @@ export function EnhancedMapDashboard() {
   );
   const [rentData, setRentData] = useState<IndicatorMapFeatureCollection | null>(null);
   const [saleData, setSaleData] = useState<IndicatorMapFeatureCollection | null>(null);
+  const [demographicsData, setDemographicsData] = useState<IndicatorMapFeatureCollection | null>(null);
   const [transportPoints, setTransportPoints] = useState<TransportPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
@@ -1612,7 +1779,8 @@ export function EnhancedMapDashboard() {
         (mainIndicator === "transport" && vivabiliteData) ||
         (mainIndicator === "thermal" && thermalData) ||
         (mainIndicator === "housing" && selectedMetric === "rent_score" && rentData) ||
-        (mainIndicator === "housing" && selectedMetric === "sale_score" && saleData)
+        (mainIndicator === "housing" && selectedMetric === "sale_score" && saleData) ||
+        (mainIndicator === "demographics" && demographicsData)
       ) {
         setLoading(false);
         setError(null);
@@ -1638,12 +1806,18 @@ export function EnhancedMapDashboard() {
           if (active) {
             setSaleData(geojson);
           }
+        } else if (mainIndicator === "demographics") {
+          const geojson = await fetchDemographicsMap();
+          if (active) {
+            setDemographicsData(geojson);
+        }  
         } else {
           const geojson = await fetchVivabiliteMap();
           if (active) {
             setVivabiliteData(geojson);
           }
         }
+        
       } catch (err) {
         if (active) {
           setError(err instanceof Error ? err.message : "Map layer unavailable");
@@ -1688,10 +1862,11 @@ export function EnhancedMapDashboard() {
   const sourceData = useMemo(() => {
     if (mainIndicator === "thermal") return thermalData;
     if (mainIndicator === "housing") return selectedMetric === "sale_score" ? saleData : rentData;
+    if (mainIndicator === "demographics") return demographicsData;
     // vivabilite & transport: use arrondissement layer when zoomed out
     if (currentZoom < ZOOM_BREAK && arrData) return arrData;
     return vivabiliteData;
-  }, [mainIndicator, rentData, saleData, selectedMetric, thermalData, vivabiliteData, currentZoom, arrData]);
+  }, [mainIndicator, rentData, saleData, selectedMetric, thermalData, vivabiliteData, currentZoom, arrData, demographicsData]);
 
   const computedData = useMemo(
     () => buildComputedGeojson(sourceData, weights, selectedMetric),

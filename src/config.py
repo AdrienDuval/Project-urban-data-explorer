@@ -83,9 +83,9 @@ TRANSPORT_VELIB_SILVER  = SILVER / "velib_paris.csv"
 
 BDCOM_GOLD      = GOLD / "bdcom.csv"
 DVF_GOLD        = GOLD / "dvf.csv"
-THERMAL_COMFORT_GOLD = GOLD / "urban_comfort_index.parquet"
-SALE_PRICE_GOLD = GOLD / "sale_price_median.parquet"
-RENT_PRICE_GOLD = GOLD / "rent_data_par_arrdt.parquet"
+THERMAL_COMFORT_GOLD = GOLD / "urban_comfort_index.csv"
+SALE_PRICE_GOLD = GOLD / "sale_price_median.csv"
+RENT_PRICE_GOLD = GOLD / "rent_data_par_arrdt.csv"
 
 SCHOOL_DENSITY_GOLD      = GOLD / "schools_score_iris.csv"
 # Geopandas buffer-based 0–10 score (input to vivabilité familiale)
