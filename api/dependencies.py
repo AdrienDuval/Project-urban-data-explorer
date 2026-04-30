@@ -1,29 +1,31 @@
-"""FastAPI dependency-injection helpers.
-
-Import these ``Annotated`` aliases in routers instead of writing the full
-``Depends(...)`` expressions by hand.  This keeps routers concise and makes
-swapping the backing store trivial in tests.
-"""
+"""FastAPI dependency-injection helpers."""
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Query, Request
+from fastapi import Depends, Query
 
 from api.services.data_loader import DataStore
+from api.services.spatial_cache import SpatialStore, get_spatial_store
 
 
 # ---------------------------------------------------------------------------
-# DataStore injection
+# DataStore injection (legacy — only used by bdcom/dvf routers)
 # ---------------------------------------------------------------------------
 
-def _get_data_store(request: Request) -> DataStore:
-    """Extract the DataStore loaded at startup from ``app.state``."""
-    return request.app.state.data
+def _get_data_store() -> DataStore:
+    return DataStore.load()
 
 
 DataStoreDep = Annotated[DataStore, Depends(_get_data_store)]
+
+
+# ---------------------------------------------------------------------------
+# SpatialStore injection (map layers with geometry)
+# ---------------------------------------------------------------------------
+
+SpatialStoreDep = Annotated[SpatialStore, Depends(get_spatial_store)]
 
 
 # ---------------------------------------------------------------------------

@@ -768,6 +768,7 @@ function SidebarExpandedContent({
   featureCount,
   averageScore,
   schoolShare,
+  loadingStates,
   mainIndicator,
   selectedSubMetric,
   transportTypeCounts,
@@ -787,6 +788,7 @@ function SidebarExpandedContent({
   featureCount: number;
   averageScore: number | null;
   schoolShare: number;
+  loadingStates: Record<MainIndicator, boolean>;
   mainIndicator: MainIndicator;
   selectedSubMetric: MetricKey;
   transportTypeCounts: Record<TransportType, number>;
@@ -930,7 +932,13 @@ function SidebarExpandedContent({
         <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
           Top matches
         </p>
-        {ranking.length > 0 ? (
+        {loadingStates[mainIndicator] ? (
+          <div className="space-y-1.5">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 rounded-xl bg-slate-100 animate-pulse" />
+            ))}
+          </div>
+        ) : ranking.length > 0 ? (
           ranking.map((feature) => (
             <button
               className="flex w-full items-center justify-between gap-2 rounded-xl bg-white/60 px-2.5 py-1.5 text-left transition hover:bg-white"
@@ -964,6 +972,7 @@ function Sidebar({
   featureCount,
   averageScore,
   schoolShare,
+  loadingStates,
   mainIndicator,
   selectedSubMetric,
   transportTypeCounts,
@@ -989,6 +998,7 @@ function Sidebar({
   featureCount: number;
   averageScore: number | null;
   schoolShare: number;
+  loadingStates: Record<MainIndicator, boolean>;
   mainIndicator: MainIndicator;
   selectedSubMetric: MetricKey;
   transportTypeCounts: Record<TransportType, number>;
@@ -1030,6 +1040,7 @@ function Sidebar({
     arrondissementOptions,
     averageScore,
     featureCount,
+    loadingStates,
     mainIndicator,
     minScore,
     onArrondissementFilterChange,
@@ -1065,6 +1076,7 @@ function Sidebar({
       </button>
       {mainIndicatorOptions.map((indicator) => {
         const active = mainIndicator === indicator.key;
+        const isLoading = loadingStates[indicator.key];
         return (
           <button
             className={`group relative flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-2 transition md:aspect-square md:w-11 md:px-0 ${
@@ -1077,6 +1089,9 @@ function Sidebar({
             title={`${indicator.label} — ${indicator.description}`}
             type="button"
           >
+            {isLoading && (
+              <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+            )}
             <span
               className={`text-[10px] font-bold tracking-tight ${active ? "text-white" : "text-slate-900"}`}
             >
@@ -1481,55 +1496,84 @@ function DetailsPanel({
             </span>
           </div>
         ) : null}
-        {typeof feature?.loyer_median_m2 === "number" ? (
-          <div className="mt-1.5 flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">Median rent</span>
-            <span className="font-semibold text-slate-950">
-              {feature.loyer_median_m2.toFixed(1)} €/m²
-            </span>
-      {feature?.no_data ? (
-        /* ── No-data zone: show reason instead of blank metrics ── */
-        <>
-          <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-[10px] font-semibold text-slate-700">
-              {feature.typ_iris === "A"
-                ? "Activity zone — not scored"
-                : feature.typ_iris === "D"
-                ? "Special-use zone — not scored"
-                : "Residential zone — pipeline data gap"}
-            </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
-              {feature.typ_iris === "A"
-                ? "This IRIS zone is classified by INSEE as an activity area (hospital campus, large offices, shopping centre, etc.). It has no permanent residential population, so liveability scoring does not apply."
-                : feature.typ_iris === "D"
-                ? "This zone covers a park, river, cemetery, military area, or other non-residential land. INSEE does not publish household statistics for it."
-                : "This residential zone (TYP_IRIS = H) is present in the INSEE census but is missing from the pipeline output — likely due to a stale silver file. Re-run `python run_pipeline.py` to fix it."}
-            </p>
-          </div>
-
-          {/* Still show IRIS code so it can be identified */}
-          <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">IRIS code</span>
-              <span className="font-mono text-[10px] font-semibold text-slate-950">
-                {feature.code_iris ?? "N/A"}
-              </span>
-            </div>
-            <div className="mt-1.5 flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">Zone type</span>
-              <span className="font-semibold text-slate-950">
-                {feature.typ_iris === "A"
-                  ? "A — Activité"
-                  : feature.typ_iris === "D"
-                  ? "D — Divers"
-                  : "H — Habitat"}
-              </span>
-            </div>
-          </div>
-        ) : null}
-        {mainIndicator === "thermal" ? (
+        {feature?.no_data ? (
+          /* ── No-data zone: show reason instead of blank metrics ── */
           <>
-            {typeof feature?.densite_arbres === "number" ? (
+            <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[10px] font-semibold text-slate-700">
+                {feature.typ_iris === "A"
+                  ? "Activity zone — not scored"
+                  : feature.typ_iris === "D"
+                    ? "Special-use zone — not scored"
+                    : "Residential zone — pipeline data gap"}
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+                {feature.typ_iris === "A"
+                  ? "This IRIS zone is classified by INSEE as an activity area (hospital campus, large offices, shopping centre, etc.). It has no permanent residential population, so liveability scoring does not apply."
+                  : feature.typ_iris === "D"
+                    ? "This zone covers a park, river, cemetery, military area, or other non-residential land. INSEE does not publish household statistics for it."
+                    : "This residential zone (TYP_IRIS = H) is present in the INSEE census but is missing from the pipeline output — likely due to a stale silver file. Re-run `python run_pipeline.py` to fix it."}
+              </p>
+            </div>
+
+            {/* Still show IRIS code so it can be identified */}
+            <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">IRIS code</span>
+                <span className="font-mono text-[10px] font-semibold text-slate-950">
+                  {feature.code_iris ?? "N/A"}
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Zone type</span>
+                <span className="font-semibold text-slate-950">
+                  {feature.typ_iris === "A"
+                    ? "A — Activité"
+                    : feature.typ_iris === "D"
+                      ? "D — Divers"
+                      : "H — Habitat"}
+                </span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {typeof feature?.loyer_median_m2 === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Median rent</span>
+                <span className="font-semibold text-slate-950">
+                  {feature.loyer_median_m2.toFixed(1)} €/m²
+                </span>
+              </div>
+            ) : null}
+            {mainIndicator === "thermal" ? (
+              <>
+                {typeof feature?.densite_arbres === "number" ? (
+                  <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Tree density</span>
+                    <span className="font-semibold text-slate-950">
+                      {feature.densite_arbres.toFixed(1)} trees/ha
+                    </span>
+                  </div>
+                ) : null}
+                {typeof (feature as any)?.cooling_area_score === "number" ? (
+                  <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Cooling area score</span>
+                    <span className="font-semibold text-slate-950">
+                      {formatScore((feature as any).cooling_area_score)}
+                    </span>
+                  </div>
+                ) : null}
+                {typeof (feature as any)?.proximity_score === "number" ? (
+                  <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Proximity score</span>
+                    <span className="font-semibold text-slate-950">
+                      {formatScore((feature as any).proximity_score)}
+                    </span>
+                  </div>
+                ) : null}
+              </>
+            ) : typeof feature?.densite_arbres === "number" ? (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500">Tree density</span>
                 <span className="font-semibold text-slate-950">
@@ -1537,32 +1581,7 @@ function DetailsPanel({
                 </span>
               </div>
             ) : null}
-            {typeof (feature as any)?.cooling_area_score === "number" ? (
-              <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">Cooling area score</span>
-                <span className="font-semibold text-slate-950">
-                  {formatScore((feature as any).cooling_area_score)}
-                </span>
-              </div>
-            ) : null}
-            {typeof (feature as any)?.proximity_score === "number" ? (
-              <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">Proximity score</span>
-                <span className="font-semibold text-slate-950">
-                  {formatScore((feature as any).proximity_score)}
-                </span>
-              </div>
-            ) : null}
           </>
-        ) : (
-          typeof feature?.densite_arbres === "number" ? (
-            <div className="mt-1.5 flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">Tree density</span>
-              <span className="font-semibold text-slate-950">
-                {feature.densite_arbres.toFixed(1)} trees/ha
-              </span>
-            </div>
-          ) : null
         )}
       </div>
 
@@ -1606,7 +1625,14 @@ function DetailsPanel({
             <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
               {bestPillar.shortLabel} · {formatScore(bestPillar.value)}
             </p>
-        </>
+          </div>
+          <div className="rounded-lg bg-amber-50 p-2">
+            <p className="text-[9px] font-medium text-amber-800">Weakest pillar</p>
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
+              {weakestPillar.shortLabel} · {formatScore(weakestPillar.value)}
+            </p>
+          </div>
+        </div>
       ) : (
         /* ── Scored zone: full metrics ── */
         <>
@@ -1693,7 +1719,15 @@ export function EnhancedMapDashboard() {
   const [transportPoints, setTransportPoints] = useState<TransportPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [transportError, setTransportError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingStates, setLoadingStates] = useState<Record<MainIndicator, boolean>>({
+    vivabilite: true,
+    transport: false,
+    thermal: false,
+    housing: false,
+    demographics: false,
+  });
+  const setLayerLoading = (indicator: MainIndicator, value: boolean) =>
+    setLoadingStates((prev) => ({ ...prev, [indicator]: value }));
   const [weights, setWeights] = useState<Weights>(defaultWeights);
   const [mainIndicator, setMainIndicator] = useState<MainIndicator>("vivabilite");
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("vivabilite_score");
@@ -1753,7 +1787,7 @@ export function EnhancedMapDashboard() {
         setError(err.message);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setLayerLoading("vivabilite", false);
       });
 
     fetchVivabiliteArrondissement()
@@ -1782,12 +1816,12 @@ export function EnhancedMapDashboard() {
         (mainIndicator === "housing" && selectedMetric === "sale_score" && saleData) ||
         (mainIndicator === "demographics" && demographicsData)
       ) {
-        setLoading(false);
+        setLayerLoading(mainIndicator, false);
         setError(null);
         return;
       }
 
-      setLoading(true);
+      setLayerLoading(mainIndicator, true);
       setError(null);
 
       try {
@@ -1824,7 +1858,7 @@ export function EnhancedMapDashboard() {
         }
       } finally {
         if (active) {
-          setLoading(false);
+          setLayerLoading(mainIndicator, false);
         }
       }
     }
@@ -2117,6 +2151,7 @@ export function EnhancedMapDashboard() {
           arrondissementOptions={arrondissementOptions}
           expanded={sidebarExpanded}
           featureCount={stats.featureCount}
+          loadingStates={loadingStates}
           mainIndicator={mainIndicator}
           minScore={minScore}
           mobileSheetOpen={mobileSheetOpen}
@@ -2462,14 +2497,17 @@ export function EnhancedMapDashboard() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/25 p-6 backdrop-blur-sm">
-          <GlassCard className="rounded-3xl p-5 text-center">
-            <p className="text-[13px] font-semibold text-slate-950">Loading map data</p>
-            <p className="mt-1.5 text-[13px] text-slate-500">
-              Fetching {mainLabel.toLowerCase()} polygons and scores...
-            </p>
-          </GlassCard>
+      {loadingStates[mainIndicator] ? (
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          <div className="absolute inset-0 bg-slate-200/30 animate-pulse" />
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+            <GlassCard className="rounded-2xl px-4 py-2.5 flex items-center gap-2">
+              <span className="h-3 w-3 rounded-full bg-blue-500 animate-bounce" />
+              <p className="text-[12px] font-semibold text-slate-800">
+                Loading {mainLabel.toLowerCase()}...
+              </p>
+            </GlassCard>
+          </div>
         </div>
       ) : null}
 

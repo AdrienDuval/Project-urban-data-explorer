@@ -2,84 +2,85 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
-import pandas as pd
+from cachetools import TTLCache, cached
+from cachetools.keys import hashkey
+from sqlalchemy import func, select
 
+from api.db_models import population_ref as pr
+from api.db_models import school_density as sd
 from api.models.common import PaginatedResponse
 from api.models.population import PopulationZone
-from api.services.data_loader import DataStore
+from src.db import SessionLocal
+
+_cache = TTLCache(maxsize=300, ttl=3600)
+_lock = threading.Lock()
 
 
-def _row_to_zone(row: pd.Series) -> PopulationZone:
+def _row_to_zone(row: dict) -> PopulationZone:
     return PopulationZone(
         code_iris=str(row["IRIS"]).zfill(9),
-        arrondissement=str(row.get("LIBCOM", "")),
-        name=str(row.get("LIBIRIS", row.get("LAB_IRIS", ""))),
-        quarter_code=str(row.get("GRD_QUART", "")),
+        arrondissement=str(row.get("LIBCOM") or ""),
+        name=str(row.get("LIBIRIS") or row.get("LAB_IRIS") or ""),
+        quarter_code=str(row.get("GRD_QUART") or ""),
         population=float(row["population"]),
     )
 
 
-def _enrich_population(store: DataStore) -> pd.DataFrame:
-    """Join population silver with iris_scores gold to add LIBCOM/LIBIRIS/GRD_QUART."""
-    pop = store.population.copy()
-    pop["IRIS"] = pop["IRIS"].astype(str).str.zfill(9)
-    if store.iris_scores.empty:
-        return pop
-    meta = store.iris_scores[["code_iris", "LIBCOM", "LIBIRIS", "GRD_QUART"]].copy()
-    meta = meta.rename(columns={"code_iris": "IRIS"})
-    return pop.merge(meta, on="IRIS", how="left")
+def _enriched_stmt(arrondissement: Optional[str]):
+    """JOIN population_ref with school_density to get LIBCOM/LIBIRIS/GRD_QUART."""
+    stmt = (
+        select(
+            pr.c.IRIS,
+            pr.c.population,
+            sd.c.LIBCOM,
+            sd.c.LIBIRIS,
+            sd.c.GRD_QUART,
+        )
+        .outerjoin(sd, pr.c.IRIS == sd.c.code_iris)
+        .order_by(pr.c.IRIS)
+    )
+    if arrondissement:
+        stmt = stmt.where(sd.c.LIBCOM.ilike(f"%{arrondissement}%"))
+    return stmt
 
 
-def _paginate(df: pd.DataFrame, page: int, size: int) -> tuple[pd.DataFrame, int]:
-    total = len(df)
-    return df.iloc[(page - 1) * size : page * size], total
-
-
+@cached(cache=_cache, lock=_lock, key=lambda **kw: hashkey(**kw))
 def list_population_zones(
-    store: DataStore,
     *,
     arrondissement: Optional[str] = None,
     page: int = 1,
     size: int = 50,
 ) -> PaginatedResponse[PopulationZone]:
-    """Return a paginated list of residential IRIS zones with census population.
+    stmt = _enriched_stmt(arrondissement)
 
-    Args:
-        store:          Loaded DataStore.
-        arrondissement: Partial, case-insensitive match against the LIBCOM
-                        column (e.g. ``"7e"``).
-        page:           1-based page number.
-        size:           Page size (max enforced by the router).
-    """
-    df = _enrich_population(store)
+    db = SessionLocal()
+    try:
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        rows = db.execute(stmt.offset((page - 1) * size).limit(size)).mappings().all()
+    finally:
+        db.close()
 
-    if arrondissement:
-        df = df[df["LIBCOM"].str.contains(arrondissement, case=False, na=False)]
-
-    page_df, total = _paginate(df, page, size)
     pages = max(1, -(-total // size))
-
     return PaginatedResponse(
-        items=[_row_to_zone(row) for _, row in page_df.iterrows()],
-        total=total,
-        page=page,
-        size=size,
-        pages=pages,
+        items=[_row_to_zone(dict(r)) for r in rows],
+        total=total, page=page, size=size, pages=pages,
     )
 
 
-def get_population_zone(
-    store: DataStore, code_iris: str
-) -> Optional[PopulationZone]:
-    """Fetch population data for a single IRIS zone by its 9-digit code.
-
-    Returns ``None`` when the code is not found in the residential dataset.
-    """
+@cached(cache=_cache, lock=_lock, key=lambda code_iris: hashkey("get", code_iris))
+def get_population_zone(code_iris: str) -> Optional[PopulationZone]:
     code_iris = code_iris.zfill(9)
-    df = _enrich_population(store)
-    matches = df[df["IRIS"] == code_iris]
-    if matches.empty:
-        return None
-    return _row_to_zone(matches.iloc[0])
+    stmt = (
+        select(pr.c.IRIS, pr.c.population, sd.c.LIBCOM, sd.c.LIBIRIS, sd.c.GRD_QUART)
+        .outerjoin(sd, pr.c.IRIS == sd.c.code_iris)
+        .where(pr.c.IRIS == code_iris)
+    )
+    db = SessionLocal()
+    try:
+        row = db.execute(stmt).mappings().first()
+    finally:
+        db.close()
+    return _row_to_zone(dict(row)) if row else None

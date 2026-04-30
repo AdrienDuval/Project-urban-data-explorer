@@ -6,96 +6,55 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from api.dependencies import DataStoreDep
+from api.dependencies import SpatialStoreDep
 from api.services import map_service
 
 router = APIRouter()
 
 
-@router.get(
-    "/vivabilite-familiale",
-    response_model=None,
-    summary="IRIS GeoJSON enriched with family liveability scores",
-    description=(
-        "Return a GeoJSON FeatureCollection for the interactive map. Each "
-        "feature is an IRIS polygon with vivabilite score, rank, population, "
-        "and the four sub-scores used by the composite indicator."
-    ),
-)
-def get_vivabilite_map(store: DataStoreDep) -> dict[str, Any]:
+@router.get("/vivabilite-familiale", response_model=None, summary="IRIS GeoJSON with liveability scores")
+def get_vivabilite_map(spatial: SpatialStoreDep) -> dict[str, Any]:
     try:
-        return map_service.build_vivabilite_geojson(store)
+        return map_service.build_vivabilite_geojson(spatial)
     except map_service.MapDataUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.get(
-    "/vivabilite-familiale/arrondissement",
-    response_model=None,
-    summary="Arrondissement GeoJSON with aggregated family liveability scores",
-)
-def get_vivabilite_arrondissement_map(store: DataStoreDep) -> dict[str, Any]:
+@router.get("/vivabilite-familiale/arrondissement", response_model=None, summary="Arrondissement GeoJSON with liveability")
+def get_vivabilite_arrondissement_map(spatial: SpatialStoreDep) -> dict[str, Any]:
     try:
-        return map_service.build_vivabilite_arrondissement_geojson(store)
+        return map_service.build_vivabilite_arrondissement_geojson(spatial)
     except map_service.MapDataUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.get(
-    "/thermal-comfort",
-    response_model=None,
-    summary="IRIS GeoJSON enriched with thermal comfort scores",
-    description=(
-        "Return an IRIS-level GeoJSON FeatureCollection with the thermal "
-        "comfort composite, tree-density sub-score, and cooling-area sub-score."
-    ),
-)
-def get_thermal_comfort_map(store: DataStoreDep) -> dict[str, Any]:
+@router.get("/thermal-comfort", response_model=None, summary="IRIS GeoJSON with thermal comfort scores")
+def get_thermal_comfort_map(spatial: SpatialStoreDep) -> dict[str, Any]:
     try:
-        return map_service.build_thermal_comfort_geojson(store)
+        return map_service.build_thermal_comfort_geojson(spatial)
     except map_service.MapDataUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.get(
-    "/housing/rent",
-    response_model=None,
-    summary="Arrondissement GeoJSON enriched with median rent scores",
-    description=(
-        "Return an arrondissement-level GeoJSON FeatureCollection with median "
-        "rent per square metre and an affordability score."
-    ),
-)
-def get_rent_map(store: DataStoreDep) -> dict[str, Any]:
+@router.get("/housing/rent", response_model=None, summary="Arrondissement GeoJSON with rent scores")
+def get_rent_map(spatial: SpatialStoreDep) -> dict[str, Any]:
     try:
-        return map_service.build_rent_geojson(store)
+        return map_service.build_rent_geojson(spatial)
     except map_service.MapDataUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@router.get(
-    "/housing/sale",
-    response_model=None,
-    summary="Arrondissement GeoJSON enriched with median sale price scores",
-    description=(
-        "Return the latest arrondissement-level sale price GeoJSON with median "
-        "price per square metre and an affordability score."
-    ),
-)
-def get_sale_map(store: DataStoreDep) -> dict[str, Any]:
+@router.get("/housing/sale", response_model=None, summary="Arrondissement GeoJSON with sale price scores")
+def get_sale_map(spatial: SpatialStoreDep) -> dict[str, Any]:
     try:
-        return map_service.build_sale_geojson(store)
+        return map_service.build_sale_geojson(spatial)
     except map_service.MapDataUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    
 
-@router.get(
-    "/demographics",
-    response_model=None,
-    summary="IRIS GeoJSON enriched with demographic and socio-economic scores",
-)
-def get_demographics_map(store: DataStoreDep) -> dict[str, Any]:
+
+@router.get("/demographics", response_model=None, summary="IRIS GeoJSON with demographic scores")
+def get_demographics_map(spatial: SpatialStoreDep) -> dict[str, Any]:
     try:
-        return map_service.build_demographics_geojson(store)
+        return map_service.build_demographics_geojson(spatial)
     except map_service.MapDataUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

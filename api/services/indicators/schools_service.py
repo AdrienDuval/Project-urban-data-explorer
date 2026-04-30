@@ -1,56 +1,49 @@
-"""Business logic for the school-accessibility indicator.
-
-Combines the gold-layer ``iris_scores`` DataFrame (school counts and scores)
-with IRIS administrative metadata and census population to produce the
-``SchoolIndicator`` response model.
-"""
+"""Business logic for the school-accessibility indicator."""
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
-import pandas as pd
+from cachetools import TTLCache, cached
+from cachetools.keys import hashkey
+from sqlalchemy import func, select
 
+from api.db_models import school_density as sd
 from api.models.common import PaginatedResponse
 from api.models.indicators.schools import SchoolArrondissementStats, SchoolIndicator
-from api.services.data_loader import DataStore
+from src.db import SessionLocal
+
+_cache = TTLCache(maxsize=500, ttl=1800)
+_lock = threading.Lock()
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _row_to_indicator(row: pd.Series) -> SchoolIndicator:
-    """Convert a ``iris_scores`` row into a ``SchoolIndicator``."""
+def _row_to_indicator(row: dict) -> SchoolIndicator:
     return SchoolIndicator(
-        code_iris=str(row["code_iris"]),
-        name=row["LIBIRIS"] if pd.notna(row.get("LIBIRIS")) else None,
-        quarter_code=(
-            str(int(row["GRD_QUART"])) if pd.notna(row.get("GRD_QUART")) else None
-        ),
-        arrondissement=row["LIBCOM"] if pd.notna(row.get("LIBCOM")) else None,
-        population=row["population"] if pd.notna(row.get("population")) else None,
-        school_count=int(row["school_count"]),
-        schools_per_1000=(
-            row["schools_per_1000"] if pd.notna(row.get("schools_per_1000")) else None
-        ),
-        school_score=(
-            row["school_score"] if pd.notna(row.get("school_score")) else None
-        ),
+        code_iris=str(row["code_iris"]).zfill(9),
+        name=row.get("LIBIRIS"),
+        quarter_code=str(int(row["GRD_QUART"])) if row.get("GRD_QUART") is not None else None,
+        arrondissement=row.get("LIBCOM"),
+        population=row.get("population"),
+        school_count=int(row["school_count"]) if row.get("school_count") is not None else 0,
+        schools_per_1000=row.get("schools_per_1000"),
+        school_score=row.get("school_score"),
     )
 
 
-def _paginate(df: pd.DataFrame, page: int, size: int) -> tuple[pd.DataFrame, int]:
-    total = len(df)
-    return df.iloc[(page - 1) * size : page * size], total
+def _base_stmt(arrondissement, min_score, max_score):
+    stmt = select(sd)
+    if arrondissement:
+        stmt = stmt.where(sd.c.LIBCOM.ilike(f"%{arrondissement}%"))
+    if min_score is not None:
+        stmt = stmt.where(sd.c.school_score >= min_score)
+    if max_score is not None:
+        stmt = stmt.where(sd.c.school_score <= max_score)
+    return stmt.order_by(sd.c.code_iris)
 
 
-# ---------------------------------------------------------------------------
-# Public service functions
-# ---------------------------------------------------------------------------
-
+@cached(cache=_cache, lock=_lock, key=lambda **kw: hashkey(**kw))
 def list_school_indicators(
-    store: DataStore,
     *,
     arrondissement: Optional[str] = None,
     min_score: Optional[float] = None,
@@ -58,96 +51,79 @@ def list_school_indicators(
     page: int = 1,
     size: int = 50,
 ) -> PaginatedResponse[SchoolIndicator]:
-    """Return a paginated list of school-accessibility scores per IRIS zone.
+    stmt = _base_stmt(arrondissement, min_score, max_score)
 
-    Args:
-        store:          Loaded DataStore.
-        arrondissement: Partial, case-insensitive match on the arrondissement
-                        name (e.g. ``"7e"``).
-        min_score:      Include only zones with school_score ≥ this value.
-        max_score:      Include only zones with school_score ≤ this value.
-        page:           1-based page number.
-        size:           Page size (max enforced by the router).
-    """
-    df = store.iris_scores.copy()
+    db = SessionLocal()
+    try:
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        rows = db.execute(stmt.offset((page - 1) * size).limit(size)).mappings().all()
+    finally:
+        db.close()
 
-    if arrondissement:
-        df = df[df["LIBCOM"].str.contains(arrondissement, case=False, na=False)]
-
-    if min_score is not None:
-        df = df[df["school_score"].notna() & (df["school_score"] >= min_score)]
-
-    if max_score is not None:
-        df = df[df["school_score"].notna() & (df["school_score"] <= max_score)]
-
-    page_df, total = _paginate(df, page, size)
     pages = max(1, -(-total // size))
-
     return PaginatedResponse(
-        items=[_row_to_indicator(row) for _, row in page_df.iterrows()],
-        total=total,
-        page=page,
-        size=size,
-        pages=pages,
+        items=[_row_to_indicator(dict(r)) for r in rows],
+        total=total, page=page, size=size, pages=pages,
     )
 
 
-def get_school_indicator(
-    store: DataStore, code_iris: str
-) -> Optional[SchoolIndicator]:
-    """Fetch school-accessibility data for a single IRIS zone.
+@cached(cache=_cache, lock=_lock, key=lambda: hashkey("arrondissements"))
+def list_school_arrondissements() -> list[SchoolArrondissementStats]:
+    stmt = (
+        select(
+            sd.c.LIBCOM,
+            func.count(sd.c.code_iris).label("iris_count"),
+            func.sum(sd.c.population).label("total_population"),
+            func.sum(sd.c.school_count).label("total_schools"),
+            func.avg(sd.c.schools_per_1000).label("avg_per_1000"),
+            func.avg(sd.c.school_score).label("avg_score"),
+            func.sum(sd.c.schools_per_1000 * sd.c.population).label("weighted_sum"),
+        )
+        .where(
+            sd.c.LIBCOM.is_not(None),
+            sd.c.population.is_not(None),
+            sd.c.school_score.is_not(None),
+        )
+        .group_by(sd.c.LIBCOM)
+        .order_by(sd.c.LIBCOM)
+    )
+    db = SessionLocal()
+    try:
+        rows = db.execute(stmt).all()
+    finally:
+        db.close()
 
-    Returns ``None`` when the code is not found (router raises 404).
-    """
-    code_iris = code_iris.zfill(9)
-    matches = store.iris_scores[store.iris_scores["code_iris"] == code_iris]
-    if matches.empty:
-        return None
-    return _row_to_indicator(matches.iloc[0])
-
-
-def list_school_arrondissements(
-    store: DataStore,
-) -> list[SchoolArrondissementStats]:
-    """Aggregate school-accessibility metrics by arrondissement.
-
-    Only residential zones (non-null population, LIBCOM, and school_score) are
-    included so that per-1 000 metrics are meaningful.
-    """
-    df = store.iris_scores.dropna(subset=["LIBCOM", "population", "school_score"])
-
-    results: list[SchoolArrondissementStats] = []
-    for arrond, group in df.groupby("LIBCOM"):
-        total_pop = group["population"].sum()
-        total_schools = group["school_count"].sum()
-        weighted = (group["schools_per_1000"] * group["population"]).sum()
+    results = []
+    for r in rows:
+        total_pop = float(r.total_population or 0)
+        weighted = float(r.weighted_sum or 0)
         avg_per_1000 = round(weighted / total_pop, 4) if total_pop > 0 else 0.0
-
         results.append(
             SchoolArrondissementStats(
-                arrondissement=str(arrond),
-                iris_count=len(group),
+                arrondissement=str(r.LIBCOM),
+                iris_count=int(r.iris_count),
                 total_population=round(total_pop, 2),
-                total_schools=int(total_schools),
+                total_schools=int(r.total_schools or 0),
                 avg_schools_per_1000=avg_per_1000,
-                avg_school_score=round(float(group["school_score"].mean()), 4),
+                avg_school_score=round(float(r.avg_score or 0), 4),
             )
         )
-
-    results.sort(key=lambda x: x.arrondissement)
     return results
 
 
-def get_school_arrondissement(
-    store: DataStore, arrondissement: str
-) -> Optional[SchoolArrondissementStats]:
-    """Return stats for a single arrondissement (case-insensitive partial match).
+@cached(cache=_cache, lock=_lock, key=lambda code_iris: hashkey("get", code_iris))
+def get_school_indicator(code_iris: str) -> Optional[SchoolIndicator]:
+    code_iris = code_iris.zfill(9)
+    stmt = select(sd).where(sd.c.code_iris == code_iris)
+    db = SessionLocal()
+    try:
+        row = db.execute(stmt).mappings().first()
+    finally:
+        db.close()
+    return _row_to_indicator(dict(row)) if row else None
 
-    Returns ``None`` when nothing matches (router raises 404).
-    """
+
+def get_school_arrondissement(arrondissement: str) -> Optional[SchoolArrondissementStats]:
     query = arrondissement.lower()
-    matches = [
-        s for s in list_school_arrondissements(store)
-        if query in s.arrondissement.lower()
-    ]
+    matches = [s for s in list_school_arrondissements() if query in s.arrondissement.lower()]
     return matches[0] if matches else None

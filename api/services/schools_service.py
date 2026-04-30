@@ -2,26 +2,27 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
-import pandas as pd
+from cachetools import TTLCache, cached
+from cachetools.keys import hashkey
+from sqlalchemy import func, select
 
+from api.db_models import schools_ref as sr
 from api.models.common import PaginatedResponse
 from api.models.schools import School
-from api.services.data_loader import DataStore
+from src.db import SessionLocal
 
-# Valid school types sourced from the silver pipeline
-VALID_TYPES = {"Collège", "Maternelle", "Elémentaire", "Polyvalent"}
+_cache = TTLCache(maxsize=500, ttl=3600)
+_lock = threading.Lock()
+
+_ORDER_BY = [sr.c.name, sr.c.address]
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _row_to_school(idx: int, row: pd.Series) -> School:
-    """Convert a DataFrame row into a ``School`` response model."""
+def _row_to_school(row_id: int, row: dict) -> School:
     return School(
-        id=int(idx),
+        id=row_id,
         name=str(row["name"]),
         address=str(row["address"]),
         arrondissement=str(row["arrondissement"]),
@@ -33,18 +34,23 @@ def _row_to_school(idx: int, row: pd.Series) -> School:
     )
 
 
-def _paginate(df: pd.DataFrame, page: int, size: int) -> tuple[pd.DataFrame, int]:
-    total = len(df)
-    offset = (page - 1) * size
-    return df.iloc[offset : offset + size], total
+def _base_stmt(
+    school_type: Optional[str],
+    arrondissement: Optional[str],
+    name: Optional[str],
+):
+    stmt = select(sr)
+    if school_type:
+        stmt = stmt.where(sr.c.type == school_type)
+    if arrondissement:
+        stmt = stmt.where(sr.c.arrondissement.ilike(f"%{arrondissement}%"))
+    if name:
+        stmt = stmt.where(sr.c.name.ilike(f"%{name}%"))
+    return stmt.order_by(*_ORDER_BY)
 
 
-# ---------------------------------------------------------------------------
-# Public service functions
-# ---------------------------------------------------------------------------
-
+@cached(cache=_cache, lock=_lock, key=lambda **kw: hashkey(**kw))
 def list_schools(
-    store: DataStore,
     *,
     school_type: Optional[str] = None,
     arrondissement: Optional[str] = None,
@@ -52,49 +58,27 @@ def list_schools(
     page: int = 1,
     size: int = 50,
 ) -> PaginatedResponse[School]:
-    """Return a paginated, optionally filtered list of schools.
+    stmt = _base_stmt(school_type, arrondissement, name)
+    offset = (page - 1) * size
 
-    Args:
-        store:          Loaded DataStore.
-        school_type:    Exact match against the ``type`` column.  Must be one of
-                        Collège, Maternelle, Elémentaire, Polyvalent.
-        arrondissement: Partial, case-insensitive match against the
-                        ``arrondissement`` column (e.g. ``"9ème"``).
-        name:           Partial, case-insensitive match against the school name.
-        page:           1-based page number.
-        size:           Page size (max enforced by the router).
-    """
-    df = store.schools.copy()
+    db = SessionLocal()
+    try:
+        total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        rows = db.execute(stmt.offset(offset).limit(size)).mappings().all()
+    finally:
+        db.close()
 
-    if school_type:
-        df = df[df["type"] == school_type]
-
-    if arrondissement:
-        df = df[
-            df["arrondissement"].str.contains(arrondissement, case=False, na=False)
-        ]
-
-    if name:
-        df = df[df["name"].str.contains(name, case=False, na=False)]
-
-    page_df, total = _paginate(df, page, size)
+    items = [_row_to_school(offset + i, dict(r)) for i, r in enumerate(rows)]
     pages = max(1, -(-total // size))
-
-    return PaginatedResponse(
-        items=[_row_to_school(idx, row) for idx, row in page_df.iterrows()],
-        total=total,
-        page=page,
-        size=size,
-        pages=pages,
-    )
+    return PaginatedResponse(items=items, total=total, page=page, size=size, pages=pages)
 
 
-def get_school(store: DataStore, school_id: int) -> Optional[School]:
-    """Fetch a single school by its catalog index.
-
-    Returns ``None`` when the id is out of range.
-    """
-    if school_id < 0 or school_id >= len(store.schools):
-        return None
-    row = store.schools.iloc[school_id]
-    return _row_to_school(school_id, row)
+@cached(cache=_cache, lock=_lock, key=lambda school_id: hashkey("get", school_id))
+def get_school(school_id: int) -> Optional[School]:
+    stmt = select(sr).order_by(*_ORDER_BY).offset(school_id).limit(1)
+    db = SessionLocal()
+    try:
+        row = db.execute(stmt).mappings().first()
+    finally:
+        db.close()
+    return _row_to_school(school_id, dict(row)) if row else None
