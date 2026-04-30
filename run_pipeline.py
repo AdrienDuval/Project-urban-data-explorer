@@ -42,6 +42,8 @@ from src.gold.thermal_comfort_to_gold import process_thermal_comfort_gold
 from src.gold.sale_price_median_to_gold import process_sale_price_median_to_gold
 from src.silver.sale_price_median_to_silver import process_sale_price_median_to_silver
 from src.gold.rent_data_to_gold import process_rent_data_to_gold
+from src.silver.demographics_to_silver import process_demographics_silver
+from src.gold.demographics_to_gold import process_demographics_gold
 
 from src.silver.transport import process_transport
 
@@ -62,12 +64,13 @@ def run_silver() -> None:
     process_dvf()
     process_bdcom()
     process_hospitals()
-    process_green_spaces()
-    process_transport()
     process_thermal_comfort_silver()
     process_sale_price_median_to_silver()
     process_rent_data_to_silver()
 
+    process_green_spaces()
+    process_transport()
+    process_demographics_silver()
 
 def run_gold() -> None:
     print("─" * 40)
@@ -75,6 +78,10 @@ def run_gold() -> None:
     print("─" * 40)
     load_reference_tables()
     compute_school_density()
+    process_thermal_comfort_gold()
+    process_sale_price_median_to_gold()
+    process_rent_data_to_gold()
+
     compute_transport_score()
     compute_transport_indicator_score()
     compute_transport_points()
@@ -87,6 +94,7 @@ def run_gold() -> None:
     process_rent_data_to_gold()
     process_bdcom_gold()
     process_dvf_gold()
+    process_demographics_gold()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the indice familiale pipeline.")

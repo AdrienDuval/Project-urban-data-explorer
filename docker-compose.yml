@@ -1,0 +1,52 @@
+# Urban Data Explorer — local stack
+#
+# Prerequisites:
+#   - `data/` with gold/silver assets (pipeline outputs or mounted copy)
+#   - For /auth (JWT): set SECRET_KEY (e.g. in root `.env` or export before `compose up`)
+#
+# Usage:
+#   docker compose up --build
+#
+# API: http://localhost:8000  ·  App: http://localhost:3000  ·  Mongo: localhost:27017
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      - mongo
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_MAPBOX_TOKEN: ${NEXT_PUBLIC_MAPBOX_TOKEN}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  mongo_data:

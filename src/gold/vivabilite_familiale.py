@@ -1,18 +1,8 @@
 """
 Silver → Gold: Indice de vivabilité familiale (composite score)
 
-Combines family-focused sub-indicators into a single 0–10 family suitability score
-for each Paris IRIS zone:
 
-    schools + childcare + safety + healthcare + environment
-    + green spaces + transport + daily services
 
-Housing price / affordability is intentionally excluded for now.
-
-The Gold table also stores an essential connectivity & services composite,
-combining transport, healthcare, and daily services on their existing 0–10 scale.
-
-A rank (1 = best zone in Paris) is also computed and stored.
 
 Output:
     CSV  → data/gold/vivabilite_familiale_iris.csv

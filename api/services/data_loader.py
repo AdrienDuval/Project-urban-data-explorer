@@ -17,7 +17,9 @@ import geopandas as gpd
 import pandas as pd
 
 from src.config import (
+    ARRONDISSEMENTS,
     BDCOM_GOLD,
+    DEMO_GOLD,
     DVF_GOLD,
     IRIS_GEOJSON,
     POPULATION_SILVER,
@@ -65,6 +67,9 @@ class DataStore:
     bdcom_scores: pd.DataFrame
     dvf_scores: pd.DataFrame
     iris_geojson: dict[str, Any]
+    arrondissements_geojson: dict[str, Any]
+    demographics_scores: pd.DataFrame
+
 
     # ------------------------------------------------------------------
     # Factory
@@ -92,6 +97,15 @@ class DataStore:
         else:
             logger.warning("IRIS GeoJSON not found: %s — run `python run_pipeline.py`", IRIS_GEOJSON)
             iris_geojson = {"type": "FeatureCollection", "features": []}
+
+        if ARRONDISSEMENTS.exists():
+            logger.info("Loading geometry: %s", ARRONDISSEMENTS.name)
+            with ARRONDISSEMENTS.open(encoding="utf-8") as fh:
+                arrondissements_geojson = json.load(fh)
+            logger.info("  → %d arrondissements loaded", len(arrondissements_geojson.get("features", [])))
+        else:
+            logger.warning("Arrondissements GeoJSON not found: %s", ARRONDISSEMENTS)
+            arrondissements_geojson = {"type": "FeatureCollection", "features": []}
 
         if SCHOOL_DENSITY_GOLD.exists():
             logger.info("Loading gold: %s", SCHOOL_DENSITY_GOLD.name)
@@ -169,6 +183,19 @@ class DataStore:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", SALE_PRICE_GOLD)
             sale_price_scores = gpd.GeoDataFrame()
 
+        if THERMAL_COMFORT_GOLD.exists():
+            logger.info("Loading gold: %s", THERMAL_COMFORT_GOLD.name)
+            # Utilise read_parquet au lieu de read_csv
+            thermal_comfort_scores = gpd.read_parquet(THERMAL_COMFORT_GOLD)
+            if "code_iris" in thermal_comfort_scores.columns:
+                thermal_comfort_scores["code_iris"] = (
+                    thermal_comfort_scores["code_iris"].astype(str).str.zfill(9)
+                )
+            logger.info("- %d thermal comfort zones loaded", len(thermal_comfort_scores))
+        else:
+            logger.warning("Gold file not found: %s", THERMAL_COMFORT_GOLD)
+            thermal_comfort_scores = gpd.GeoDataFrame()
+
         if BDCOM_GOLD.exists():
             logger.info("Loading gold: %s", BDCOM_GOLD.name)
             bdcom_scores = pd.read_csv(BDCOM_GOLD, dtype={"code_iris": str})
@@ -182,10 +209,25 @@ class DataStore:
             logger.info("Loading gold: %s", DVF_GOLD.name)
             dvf_scores = pd.read_csv(DVF_GOLD, dtype={"code_iris": str})
             dvf_scores["code_iris"] = dvf_scores["code_iris"].str.zfill(9)
+            dvf_scores = pd.read_csv(DVF_GOLD)
+            if "code_iris" in dvf_scores.columns:
+                dvf_scores["code_iris"] = dvf_scores["code_iris"].astype(str).str.zfill(9)
+            logger.info("  → %d DVF rows loaded", len(dvf_scores))
             logger.info("  → %d IRIS zones loaded", len(dvf_scores))
         else:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", DVF_GOLD)
             dvf_scores = pd.DataFrame()
+
+        # Dans la méthode load(), ajouter :
+        if DEMO_GOLD.exists():
+            logger.info("Loading gold: %s", DEMO_GOLD.name)
+            demographics_scores = pd.read_csv(DEMO_GOLD, dtype={"code_iris": str})
+            demographics_scores["code_iris"] = demographics_scores["code_iris"].str.zfill(9)
+            logger.info("  → %d demographics zones loaded", len(demographics_scores))
+        else:
+            logger.warning("Gold file not found: %s", DEMO_GOLD)
+            demographics_scores = pd.DataFrame()
+
 
         return cls(
             iris_scores=_clean_df(iris_scores),
@@ -200,4 +242,6 @@ class DataStore:
             bdcom_scores=_clean_df(bdcom_scores),
             dvf_scores=_clean_df(dvf_scores),
             iris_geojson=iris_geojson,
+            arrondissements_geojson=arrondissements_geojson,
+            demographics_scores=_clean_df(demographics_scores),
         )

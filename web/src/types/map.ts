@@ -46,6 +46,10 @@ export type IndicatorMapProperties = Partial<VivabiliteProperties> & {
   code_arrondissement?: string | null;
   name: string | null;
   arrondissement: string | null;
+  /** True for zones excluded from the pipeline (activity, special-use, or residential data gap) */
+  no_data?: boolean | null;
+  /** INSEE IRIS zone type: "A" = activity/institutional, "D" = park/water/special, "H" = residential */
+  typ_iris?: "A" | "D" | "H" | null;
   thermal_score?: number | null;
   tree_density_score?: number | null;
   cooling_area_score?: number | null;

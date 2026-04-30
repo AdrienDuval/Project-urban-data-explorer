@@ -16,8 +16,8 @@ def process_sale_price_median_to_gold():
     gdf_final = df_arrdt.merge(df_price, left_on="c_ar", right_on="arrondissement")
     
     # Sauvegarde en Parquet (conserve la géométrie native pour d'autres usages)
-    gdf_final.to_parquet(SALE_PRICE_GOLD, engine="pyarrow")
-    print("🏆 Gold : sale_price_median.parquet prêt pour le Dashboard.")
+    gdf_final.to_csv(SALE_PRICE_GOLD, index=False)
+    print("Gold : sale_price_median.csv prêt pour le Dashboard.")
     
     # 6. Insertion en base de données MySQL
     # Convertir la géométrie en WKT (Well-Known Text) pour MySQL
@@ -32,7 +32,7 @@ def process_sale_price_median_to_gold():
     
     # Insertion dans la table 'sale_price_median'
     df_sql.to_sql("sale_price_median", engine, if_exists="replace", index=False)
-    print("💾 Données insérées dans la table MySQL 'sale_price_median'.")
+    print("Données insérées dans la table MySQL 'sale_price_median'.")
 
 
 
