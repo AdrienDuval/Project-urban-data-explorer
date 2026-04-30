@@ -33,20 +33,19 @@ from api.routers import iris, map as map_router, population, schools, stats, bdc
 from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
-from api.services.data_loader import DataStore
 from api.routers.indicators import thermal_comfort
+from api.services.spatial_cache import get_spatial_store
 
 
 # ---------------------------------------------------------------------------
-# Lifespan: load data once at startup, clean up on shutdown
+# Lifespan: pre-warm spatial cache at startup
 # ---------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load all datasets into ``app.state.data`` at startup."""
-    app.state.data = DataStore.load()
+    """Pre-warm the spatial GeoDataFrame cache so the first map request is fast."""
+    get_spatial_store()
     yield
-    # No teardown required for in-memory DataFrames
 
 
 # ---------------------------------------------------------------------------
@@ -134,20 +133,22 @@ def create_app() -> FastAPI:
         summary="Health check",
         description="Returns 200 OK with dataset record counts when the API is ready.",
     )
-    def health(app=app):
-        """Confirm the API is running and all datasets are loaded."""
-        data: DataStore = app.state.data
-        return {
-            "status": "ok",
-            "iris_zones": len(data.iris_scores),
-            "schools": len(data.schools),
-            "population_zones": len(data.population),
-            "vivabilite_zones": len(data.vivabilite_scores),
-            "transport_points": len(data.transport_points),
-            "thermal_comfort_zones": len(data.thermal_comfort_scores),
-            "rent_zones": len(data.rent_price_scores),
-            "sale_price_rows": len(data.sale_price_scores),
-        }
+    def health():
+        """Confirm the API is running and the database is reachable."""
+        from sqlalchemy import text
+        from src.db import engine
+        with engine.connect() as conn:
+            return {
+                "status": "ok",
+                "iris_zones": conn.execute(text("SELECT COUNT(*) FROM school_density")).scalar(),
+                "schools": conn.execute(text("SELECT COUNT(*) FROM schools_ref")).scalar(),
+                "population_zones": conn.execute(text("SELECT COUNT(*) FROM population_ref")).scalar(),
+                "vivabilite_zones": conn.execute(text("SELECT COUNT(*) FROM vivabilite_familiale")).scalar(),
+                "transport_points": conn.execute(text("SELECT COUNT(*) FROM transport_points")).scalar(),
+                "thermal_comfort_zones": conn.execute(text("SELECT COUNT(*) FROM thermal_comfort")).scalar(),
+                "rent_zones": conn.execute(text("SELECT COUNT(*) FROM rent_data")).scalar(),
+                "sale_price_rows": conn.execute(text("SELECT COUNT(*) FROM sale_price_median")).scalar(),
+            }
 
     return app
 
