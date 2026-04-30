@@ -327,34 +327,27 @@ const fillLayer: LayerProps = {
   id: "vivabilite-fill",
   type: "fill",
   paint: {
+    // coalesce falls back to -1 when active_score is null/missing;
+    // the -1 stop renders gray so excluded zones look distinct
     "fill-color": [
-      "case",
-      ["!=", ["typeof", ["get", "active_score"]], "number"],
-      "#cbd5e1", // light slate-gray for excluded zones (A/D/H-gap)
-      [
-        "interpolate",
-        ["linear"],
-        ["get", "active_score"],
-        0,
-        "#f43f5e",
-        2,
-        "#fb923c",
-        4,
-        "#fbbf24",
-        6,
-        "#a3e635",
-        8,
-        "#22c55e",
-        10,
-        "#047857",
-      ],
+      "interpolate",
+      ["linear"],
+      ["coalesce", ["to-number", ["get", "active_score"], -1], -1],
+      -1, "#e2e8f0",
+      0, "#f43f5e",
+      2, "#fb923c",
+      4, "#fbbf24",
+      6, "#a3e635",
+      8, "#22c55e",
+      10, "#047857",
     ],
-    // Excluded zones get a flat low opacity; scored zones scale with zoom
     "fill-opacity": [
-      "case",
-      ["!=", ["typeof", ["get", "active_score"]], "number"],
-      0.3,
-      ["interpolate", ["linear"], ["zoom"], 9, 0.58, 13, 0.78],
+      "interpolate",
+      ["linear"],
+      ["coalesce", ["to-number", ["get", "active_score"], -1], -1],
+      -1, 0.28,
+      0, 0.68,
+      10, 0.78,
     ],
     "fill-outline-color": "rgba(15, 23, 42, 0.18)",
   },
@@ -1962,13 +1955,15 @@ export function EnhancedMapDashboard() {
           style={{ height: "100%", width: "100%" }}
         >
           <NavigationControl position="bottom-right" />
-          {displayData ? (
-            <Source data={displayData} id="vivabilite-source" type="geojson">
-              <Layer {...fillLayer} />
-              <Layer {...outlineLayer} />
-              <Layer {...activeLayer} />
-            </Source>
-          ) : null}
+          <Source
+            data={displayData ?? { type: "FeatureCollection", features: [] }}
+            id="vivabilite-source"
+            type="geojson"
+          >
+            <Layer {...fillLayer} />
+            <Layer {...outlineLayer} />
+            <Layer {...activeLayer} />
+          </Source>
 
           {showTransportMarkers ? (
             <Source

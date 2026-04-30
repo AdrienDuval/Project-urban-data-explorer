@@ -204,9 +204,10 @@ class DataStore:
 
         if DVF_GOLD.exists():
             logger.info("Loading gold: %s", DVF_GOLD.name)
-            dvf_scores = pd.read_csv(DVF_GOLD, dtype={"code_iris": str})
-            dvf_scores["code_iris"] = dvf_scores["code_iris"].str.zfill(9)
-            logger.info("  → %d IRIS zones loaded", len(dvf_scores))
+            dvf_scores = pd.read_csv(DVF_GOLD)
+            if "code_iris" in dvf_scores.columns:
+                dvf_scores["code_iris"] = dvf_scores["code_iris"].astype(str).str.zfill(9)
+            logger.info("  → %d DVF rows loaded", len(dvf_scores))
         else:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", DVF_GOLD)
             dvf_scores = pd.DataFrame()
