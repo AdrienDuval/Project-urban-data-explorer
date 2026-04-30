@@ -6,7 +6,26 @@ import type {
   VivabiliteFeatureCollection,
 } from "@/types/map";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(
+  /\/$/,
+  "",
+);
+
+/** Base URL the browser uses to call FastAPI (for error messages and debugging). */
+export function getPublicApiBaseUrl(): string {
+  return API_URL;
+}
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  try {
+    return await fetch(url, { cache: "no-store", ...init });
+  } catch {
+    throw new Error(
+      `Cannot reach the API at ${url}. If you opened Next.js via your LAN IP (not localhost), set NEXT_PUBLIC_API_URL in web/.env.local to that machine's API URL (e.g. http://192.168.x.x:8000), set CORS_EXTRA_ORIGINS on the API to match your Next origin, run python run_api.py with UDE_API_HOST=0.0.0.0 when accessing from another device — otherwise start the backend locally: python run_api.py (default http://127.0.0.1:8000).`,
+    );
+  }
+}
 
 export function authHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -62,10 +81,7 @@ export type ZoneTotalRow = {
 
 /** Most-clicked zones across all visitors (needs ``MONGO_URI`` on the API). */
 export async function fetchTopZonesByClicks(limit = 50): Promise<ZoneTotalRow[]> {
-  const response = await fetch(
-    `${API_URL}/analytics/zone-clicks/zones/top?limit=${limit}`,
-    { cache: "no-store" },
-  );
+  const response = await apiFetch(`/analytics/zone-clicks/zones/top?limit=${limit}`);
   if (!response.ok) {
     throw new Error(await readError(response));
   }
@@ -87,10 +103,7 @@ export async function fetchUserZoneInterests(
   limit = 50,
 ): Promise<UserZoneInterestRow[]> {
   const enc = encodeURIComponent(userKey);
-  const response = await fetch(
-    `${API_URL}/analytics/zone-clicks/users/${enc}?limit=${limit}`,
-    { cache: "no-store" },
-  );
+  const response = await apiFetch(`/analytics/zone-clicks/users/${enc}?limit=${limit}`);
   if (!response.ok) {
     throw new Error(await readError(response));
   }
@@ -108,9 +121,7 @@ async function readError(response: Response): Promise<string> {
 }
 
 export async function fetchVivabiliteMap(): Promise<VivabiliteFeatureCollection> {
-  const response = await fetch(`${API_URL}/map/vivabilite-familiale`, {
-    cache: "no-store",
-  });
+  const response = await apiFetch("/map/vivabilite-familiale");
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -120,9 +131,7 @@ export async function fetchVivabiliteMap(): Promise<VivabiliteFeatureCollection>
 }
 
 export async function fetchVivabiliteArrondissement(): Promise<VivabiliteFeatureCollection> {
-  const response = await fetch(`${API_URL}/map/vivabilite-familiale/arrondissement`, {
-    cache: "no-store",
-  });
+  const response = await apiFetch("/map/vivabilite-familiale/arrondissement");
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -132,9 +141,7 @@ export async function fetchVivabiliteArrondissement(): Promise<VivabiliteFeature
 }
 
 export async function fetchThermalComfortMap(): Promise<IndicatorMapFeatureCollection> {
-  const response = await fetch(`${API_URL}/map/thermal-comfort`, {
-    cache: "no-store",
-  });
+  const response = await apiFetch("/map/thermal-comfort");
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -144,9 +151,7 @@ export async function fetchThermalComfortMap(): Promise<IndicatorMapFeatureColle
 }
 
 export async function fetchRentMap(): Promise<IndicatorMapFeatureCollection> {
-  const response = await fetch(`${API_URL}/map/housing/rent`, {
-    cache: "no-store",
-  });
+  const response = await apiFetch("/map/housing/rent");
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -156,9 +161,7 @@ export async function fetchRentMap(): Promise<IndicatorMapFeatureCollection> {
 }
 
 export async function fetchSaleMap(): Promise<IndicatorMapFeatureCollection> {
-  const response = await fetch(`${API_URL}/map/housing/sale`, {
-    cache: "no-store",
-  });
+  const response = await apiFetch("/map/housing/sale");
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -168,10 +171,7 @@ export async function fetchSaleMap(): Promise<IndicatorMapFeatureCollection> {
 }
 
 export async function fetchBdcomByIris(codeIris: string): Promise<BdcomIrisStats> {
-  const response = await fetch(
-    `${API_URL}/bdcom/by-iris/${encodeURIComponent(codeIris)}`,
-    { cache: "no-store" },
-  );
+  const response = await apiFetch(`/bdcom/by-iris/${encodeURIComponent(codeIris)}`);
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -181,10 +181,7 @@ export async function fetchBdcomByIris(codeIris: string): Promise<BdcomIrisStats
 }
 
 export async function fetchDvfByIris(codeIris: string): Promise<DvfIrisStats> {
-  const response = await fetch(
-    `${API_URL}/dvf/by-iris/${encodeURIComponent(codeIris)}`,
-    { cache: "no-store" },
-  );
+  const response = await apiFetch(`/dvf/by-iris/${encodeURIComponent(codeIris)}`);
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -194,9 +191,7 @@ export async function fetchDvfByIris(codeIris: string): Promise<DvfIrisStats> {
 }
 
 export async function fetchTransportPoints(): Promise<TransportPoint[]> {
-  const response = await fetch(`${API_URL}/indicators/transport/points`, {
-    cache: "no-store",
-  });
+  const response = await apiFetch("/indicators/transport/points");
 
   if (!response.ok) {
     throw new Error(await readError(response));
@@ -207,9 +202,7 @@ export async function fetchTransportPoints(): Promise<TransportPoint[]> {
 
 
 export async function fetchDemographicsMap(): Promise<IndicatorMapFeatureCollection> {
-  const response = await fetch(`${API_URL}/map/demographics`, {
-    cache: "no-store",
-  });
+  const response = await apiFetch("/map/demographics");
 
   if (!response.ok) {
     throw new Error(await readError(response));

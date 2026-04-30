@@ -125,6 +125,12 @@ export default function LandingPage() {
             <span className="text-sm font-semibold tracking-tight text-white">Urban Data Explorer</span>
           </div>
           <nav className="flex items-center gap-1">
+            <Link
+              href="/dashboard"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+            >
+              Map
+            </Link>
             <Link href="/login" className="rounded-full px-4 py-2 text-sm font-medium text-white/80 transition hover:text-white">
               Sign in
             </Link>
@@ -172,17 +178,23 @@ export default function LandingPage() {
 
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link
-              href="/register"
+              href="/dashboard"
               className="inline-flex items-center gap-2 rounded-full bg-[#007AFF] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#007AFF]/30 transition hover:bg-[#0071E3]"
             >
-              Start exploring for free
+              Explore the map
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
                 <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
               </svg>
             </Link>
             <Link
-              href="/login"
+              href="/register"
               className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-7 py-3.5 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white/20"
+            >
+              Create a free account
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white/70 underline-offset-4 transition hover:text-white hover:underline"
             >
               Sign in
             </Link>
@@ -361,7 +373,7 @@ export default function LandingPage() {
               80+ neighbourhoods. 4 indicators. Built entirely on publicly available data from Paris Open Data, INSEE, and RATP.
             </p>
             <Link
-              href="/register"
+              href="/dashboard"
               className="inline-flex items-center gap-2 rounded-full bg-[#007AFF] px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#007AFF]/30 transition hover:bg-[#0071E3]"
             >
               Explore the map
@@ -398,17 +410,25 @@ export default function LandingPage() {
           </div>
           <h2 className="mb-4 text-3xl font-bold text-[#1d1d1f]">Ready to explore Paris?</h2>
           <p className="mb-8 text-[rgba(60,60,67,0.6)]">
-            Create a free account and start discovering which neighbourhoods fit your needs.
+            Open the interactive map anytime — no account required. Optionally create a free account to save preferences later.
           </p>
-          <Link
-            href="/register"
-            className="inline-flex items-center gap-2 rounded-full bg-[#007AFF] px-8 py-3.5 text-sm font-semibold text-white transition hover:bg-[#0071E3]"
-          >
-            Get started — it&apos;s free
-            <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-              <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
-            </svg>
-          </Link>
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 rounded-full bg-[#007AFF] px-8 py-3.5 text-sm font-semibold text-white transition hover:bg-[#0071E3]"
+            >
+              Open map
+              <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z" clipRule="evenodd" />
+              </svg>
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex items-center gap-2 rounded-full border border-[rgba(60,60,67,0.2)] px-8 py-3.5 text-sm font-semibold text-[#1d1d1f] transition hover:bg-[rgba(60,60,67,0.06)]"
+            >
+              Create account
+            </Link>
+          </div>
         </div>
       </section>
 

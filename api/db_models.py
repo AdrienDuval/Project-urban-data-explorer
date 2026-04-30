@@ -169,7 +169,7 @@ demographics = Table(
     "demographics",
     metadata,
     Column("code_iris", Text),
-    Column("nom_iris", BigInteger),
+    Column("nom_iris", Text),
     Column("population", Float),
     Column("pop_0_14", Float),
     Column("pop_15_29", Float),

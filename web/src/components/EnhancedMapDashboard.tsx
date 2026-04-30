@@ -39,10 +39,7 @@ import type {
 
 type WeightKey =
   | "school_score"
-  | "childcare_score"
-  | "safety_score"
   | "healthcare_score"
-  | "environment_score"
   | "transport_score"
   | "daily_services_score"
   | "green_spaces_score";
@@ -117,25 +114,19 @@ const ileDeFranceMaxBounds: [[number, number], [number, number]] = [
 ];
 
 const defaultWeights: Weights = {
-  school_score: 20,
-  childcare_score: 15,
-  safety_score: 20,
-  healthcare_score: 15,
-  environment_score: 15,
-  green_spaces_score: 7.5,
-  transport_score: 5,
-  daily_services_score: 2.5,
+  school_score: 40,
+  healthcare_score: 30,
+  green_spaces_score: 15,
+  transport_score: 10,
+  daily_services_score: 5,
 };
 
 const equalWeights: Weights = {
-  school_score: 12.5,
-  childcare_score: 12.5,
-  safety_score: 12.5,
-  healthcare_score: 12.5,
-  environment_score: 12.5,
-  green_spaces_score: 12.5,
-  transport_score: 12.5,
-  daily_services_score: 12.5,
+  school_score: 20,
+  healthcare_score: 20,
+  green_spaces_score: 20,
+  transport_score: 20,
+  daily_services_score: 20,
 };
 
 const pillarMeta: Array<{
@@ -153,32 +144,11 @@ const pillarMeta: Array<{
     color: "#2563eb",
   },
   {
-    key: "childcare_score",
-    label: "Childcare",
-    shortLabel: "Childcare",
-    description: "Crèches and early childhood access (neutral baseline, 5/10 for all zones).",
-    color: "#db2777",
-  },
-  {
-    key: "safety_score",
-    label: "Safety",
-    shortLabel: "Safety",
-    description: "Neighbourhood safety and security (neutral baseline, 5/10 for all zones).",
-    color: "#dc2626",
-  },
-  {
     key: "healthcare_score",
     label: "Healthcare",
     shortLabel: "Health",
     description: "Hospitals plus pharmacy/medical services nearby.",
     color: "#0891b2",
-  },
-  {
-    key: "environment_score",
-    label: "Environment",
-    shortLabel: "Env.",
-    description: "Air, noise, and heat (neutral baseline, 5/10 for all zones).",
-    color: "#65a30d",
   },
   {
     key: "transport_score",
@@ -246,12 +216,12 @@ const mainIndicatorOptions: Array<{
     description: "Rent and sale affordability at arrondissement level.",
     abbr: "LG",
   },
-{
-  key: "demographics",
-  label: "Démographie",
-  description: "Revenus, CSP et mixité sociale par IRIS.",
-  abbr: "DM",
-},
+  {
+    key: "demographics",
+    label: "Démographie",
+    description: "Revenus, CSP et mixité sociale par IRIS.",
+    abbr: "DM",
+  },
 ];
 
 function MainIndicatorGlyph({ indicator }: { indicator: MainIndicator }) {
@@ -413,15 +383,31 @@ const fillLayer: LayerProps = {
     "fill-opacity": [
       "interpolate",
       ["linear"],
-      ["coalesce", ["to-number", ["get", "active_score"], -1], -1],
-      -1, 0.28,
-      0, 0.68,
-      10, 0.78,
       ["zoom"],
       9,
-      0.58,
+      [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["to-number", ["get", "active_score"], -1], -1],
+        -1,
+        0.26,
+        0,
+        0.52,
+        10,
+        0.62,
+      ],
       13,
-      0.78,
+      [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["to-number", ["get", "active_score"], -1], -1],
+        -1,
+        0.35,
+        0,
+        0.7,
+        10,
+        0.78,
+      ],
     ],
     "fill-outline-color": "rgba(15, 23, 42, 0.18)",
   },
@@ -802,7 +788,6 @@ function Metric({
         <span className="min-w-0 truncate">{label}</span>
         {hint ? <MetricHint labelForA11y={label} text={hint} /> : null}
       </p>
-      <p className="text-[9px] font-medium uppercase tracking-wide opacity-75">{label}</p>
       <p className="mt-0.5 text-[15px] font-semibold leading-tight tracking-tight tabular-nums">
         {value}
       </p>
@@ -1476,10 +1461,12 @@ function DetailsPanel({
         .sort((a, b) => (a.value ?? 0) - (b.value ?? 0))[0]
     : null;
 
-  const headlineHint =
-    selectedMetric === "family_mix"
-      ? "Weighted average of the five pillars using your sliders. The map is colored by this headline score."
-      : `${metricMeta[selectedMetric]?.description ?? "Sub-indicator"} The map is colored by this score.`;
+  const hasBdcomStats =
+    bdcomData != null && bdcomData.total_establishments > 0;
+  const hasDvfStats = dvfData != null && dvfData.total_transactions > 0;
+  const showCommerceTransactionsSection =
+    selected != null &&
+    (irisDataLoading || hasBdcomStats || hasDvfStats);
 
   return (
     <GlassCard className="max-h-[min(62vh,640px)] w-full overflow-y-auto rounded-t-2xl p-3 md:w-[min(100%,320px)] md:rounded-2xl">
@@ -1518,31 +1505,6 @@ function DetailsPanel({
           value={feature?.active_rank ? `#${feature.active_rank}` : "N/A"}
         />
       </div>
-
-      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-        <Metric
-          label={isVivabilite ? "Original" : "Avg"}
-          value={formatScore(isVivabilite ? feature?.vivabilite_score : averageScore)}
-        />
-        {mainIndicator !== "thermal" ? (
-          <Metric
-            label="Delta"
-            value={
-              typeof feature?.score_delta === "number"
-                ? `${feature.score_delta >= 0 ? "+" : ""}${feature.score_delta.toFixed(1)}`
-                : "N/A"
-            }
-          />
-            ) : null}
-            <Metric
-              label="Percentile"
-              value={
-                typeof feature?.active_percentile === "number"
-                  ? `${feature.active_percentile}%`
-                  : "N/A"
-              }
-            />
-          </div>
 
       <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
         {mainIndicator !== "thermal" ? (
@@ -1606,19 +1568,19 @@ function DetailsPanel({
                 {feature?.code_iris ?? feature?.code_arrondissement ?? "N/A"}
               </span>
             </div>
-            {typeof feature?.loyer_median_m2 === "number" ? (
+            {typeof displayLoyerM2 === "number" ? (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500">Median rent</span>
                 <span className="font-semibold text-slate-950">
-                  {feature.loyer_median_m2.toFixed(1)} €/m²
+                  {displayLoyerM2.toFixed(1)} €/m²
                 </span>
               </div>
             ) : null}
-            {typeof feature?.prix_m2 === "number" ? (
+            {typeof displayPrixM2 === "number" ? (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500">Median sale price</span>
                 <span className="font-semibold text-slate-950">
-                  {formatNumber(feature.prix_m2)} €/m²
+                  {formatNumber(displayPrixM2)} €/m²
                 </span>
               </div>
             ) : null}
@@ -1670,7 +1632,7 @@ function DetailsPanel({
         </div>
       ) : null}
 
-      {selected ? (
+      {showCommerceTransactionsSection ? (
         <div className="mt-2.5">
           <p className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
             Commerce &amp; Transactions
@@ -1681,7 +1643,7 @@ function DetailsPanel({
             </p>
           ) : (
             <div className="mt-1 space-y-1.5">
-              {bdcomData ? (
+              {hasBdcomStats && bdcomData ? (
                 <div className="rounded-xl bg-slate-100/80 p-2">
                   <p className="text-[10px] font-semibold text-slate-700">Commercial</p>
                   <div className="mt-1 flex items-center justify-between text-[11px]">
@@ -1701,12 +1663,8 @@ function DetailsPanel({
                     </div>
                   ) : null}
                 </div>
-              ) : (
-                <div className="rounded-xl bg-slate-100/80 px-2.5 py-2 text-[11px] text-slate-400">
-                  No commercial data for this zone
-                </div>
-              )}
-              {dvfData ? (
+              ) : null}
+              {hasDvfStats && dvfData ? (
                 <div className="rounded-xl bg-slate-100/80 p-2">
                   <p className="text-[10px] font-semibold text-slate-700">Transactions (DVF)</p>
                   <div className="mt-1 flex items-center justify-between text-[11px]">
@@ -1726,11 +1684,7 @@ function DetailsPanel({
                     </div>
                   ) : null}
                 </div>
-              ) : (
-                <div className="rounded-xl bg-slate-100/80 px-2.5 py-2 text-[11px] text-slate-400">
-                  No transaction data for this zone
-                </div>
-              )}
+              ) : null}
             </div>
           )}
         </div>
@@ -1775,74 +1729,15 @@ function DetailsPanel({
             </p>
           </div>
         </div>
-      ) : (
-        /* ── Scored zone: full metrics ── */
-        <>
-          <div className="mt-2.5">
-            <Metric
-              hint={headlineHint}
-              label={metricLabel}
-              tone="green"
-              value={formatScore(feature?.active_score ?? averageScore)}
-            />
-          </div>
-
-          <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">
-                {feature?.geography === "arrondissement" ? "Level" : "Population"}
-              </span>
-              <span className="font-semibold text-slate-950">
-                {feature?.geography === "arrondissement"
-                  ? "Arrondissement"
-                  : formatNumber(feature?.population)}
-              </span>
-            </div>
-            <div className="mt-1.5 flex items-center justify-between text-[11px]">
-              <span className="text-slate-500">
-                {feature?.geography === "arrondissement" ? "Arrondissement code" : "IRIS code"}
-              </span>
-              <span className="font-mono text-[10px] font-semibold text-slate-950">
-                {feature?.code_iris ?? feature?.code_arrondissement ?? "N/A"}
-              </span>
-            </div>
-            {typeof displayLoyerM2 === "number" ? (
-              <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">Median rent</span>
-                <span className="font-semibold text-slate-950">
-                  {displayLoyerM2.toFixed(1)} €/m²
-                </span>
-              </div>
-            ) : null}
-            {typeof displayPrixM2 === "number" ? (
-              <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">Median sale price</span>
-                <span className="font-semibold text-slate-950">
-                  {formatNumber(displayPrixM2)} €/m²
-                </span>
-              </div>
-            ) : null}
-            {typeof feature?.densite_arbres === "number" ? (
-              <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                <span className="text-slate-500">Tree density</span>
-                <span className="font-semibold text-slate-950">
-                  {feature.densite_arbres.toFixed(1)} trees/ha
-                </span>
-              </div>
-            ) : null}
-          </div>
-
-          {feature && isVivabilite ? (
-            <div className="mt-2.5">
-              <ScoreBreakdown
-                feature={feature}
-                showWeightContributions={selectedMetric === "family_mix"}
-                weights={weights}
-              />
-            </div>
-          ) : null}
-        </>
-      )}
+      ) : feature && isVivabilite ? (
+        <div className="mt-2.5">
+          <ScoreBreakdown
+            feature={feature}
+            showWeightContributions={selectedMetric === "family_mix"}
+            weights={weights}
+          />
+        </div>
+      ) : null}
     </GlassCard>
   );
 }
@@ -1970,6 +1865,15 @@ export function EnhancedMapDashboard() {
         return;
       }
 
+      /* Vivabilité + transport IRIS data is loaded once on mount; avoid a second
+       * fetch here that races loading spinners (especially under Strict Mode). */
+      if (
+        (mainIndicator === "vivabilite" || mainIndicator === "transport") &&
+        !vivabiliteData
+      ) {
+        return;
+      }
+
       setLayerLoading(mainIndicator, true);
       setError(null);
 
@@ -1993,11 +1897,6 @@ export function EnhancedMapDashboard() {
           const geojson = await fetchDemographicsMap();
           if (active) {
             setDemographicsData(geojson);
-        }
-        } else {
-          const geojson = await fetchVivabiliteMap();
-          if (active) {
-            setVivabiliteData(geojson);
           }
         }
 

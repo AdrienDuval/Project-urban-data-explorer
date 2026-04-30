@@ -1,243 +1,417 @@
-# Indicateur de Vivabilité Familiale — Documentation
+# Indice de Vivabilite Familiale - Documentation Complete
 
-**Réponse à la question : Où à Paris fait-il bon vivre en famille ?**
+Ce document couvre tout le parcours de l'indice de vivabilite familiale: fichiers sources, transformations Bronze/Silver/Gold, fonctions utilisees, normalisations, tables SQL, colonnes, et exposition API.
 
-Score composite de 0 à 10 calculé par zone IRIS (~992 zones à Paris), combinant quatre sous-indicateurs indépendants pondérés à parts égales.
+## 1) Vue d'ensemble du parcours
 
----
+Pipeline d'execution (script principal): `run_pipeline.py`
 
-## Score final
+- Bronze: telechargement des donnees brutes via `src/data_loader.py::load_data()`
+- Silver: nettoyage/normalisation des jeux de donnees
+- Gold: calcul des sous-scores et du score composite
+- DB: ecriture via `to_sql(..., if_exists="replace")`
+- API: lecture depuis les tables SQL via FastAPI
+
+## 2) Localisation code (fichiers principaux)
+
+### Orchestration
+- `run_pipeline.py`
+- `src/config.py`
+- `src/db.py`
+
+### Bronze -> Silver (indice vivabilite familiale)
+- `src/silver/schools.py`
+- `src/silver/transport.py`
+- `src/silver/hospitals.py`
+- `src/silver/bdcom.py`
+- `src/silver/green_spaces.py`
+- `src/silver/iris.py`
+- `src/silver/population.py`
+
+### Silver -> Gold (scores)
+- `src/gold/school_density.py`
+- `src/gold/transport_score.py`
+- `src/gold/services_score.py`
+- `src/gold/green_spaces_score.py`
+- `src/gold/family_support_scores.py`
+- `src/gold/vivabilite_familiale.py`
+
+### API (lecture DB)
+- `api/db_models.py`
+- `api/services/indicators/vivabilite_service.py`
+- `api/routers/indicators/vivabilite.py`
+- `api/models/indicators/vivabilite.py`
+
+## 3) Sources Bronze et sorties Silver
+
+### A. Ecoles
+- Bronze:
+  - `data/bronze/indice_vivabilite_familiale/etablissements-scolaires-colleges.xlsx`
+  - `data/bronze/indice_vivabilite_familiale/etablissements-scolaires-ecoles-elementaires.xlsx`
+  - `data/bronze/indice_vivabilite_familiale/etablissements-scolaires-maternelles.xlsx`
+- Silver output: `data/silver/schools_merged.csv`
+- Fonction: `src/silver/schools.py::process_schools()`
+- Fonctions internes:
+  - `_load(path)` (normalisation noms de colonnes)
+  - filtre types (`SCHOOL_TYPES` depuis `src/config.py`)
+  - dedoublonnage (nom + adresse, annee la plus recente)
+  - extraction `lat/lng` depuis `geo_point`
+
+### B. Transport
+- Bronze:
+  - `data/bronze/transport_data/arrets.csv`
+  - `data/bronze/transport_data/velib.csv`
+- Silver outputs:
+  - `data/silver/transport_arrets_paris.csv`
+  - `data/silver/velib_paris.csv`
+- Fonctions:
+  - `src/silver/transport.py::process_transport_arrets()`
+  - `src/silver/transport.py::process_velib()`
+  - `src/silver/transport.py::process_transport()`
+- Regles:
+  - extraction coordonnees via `_split_geopoint()`
+  - normalisation type (`lower()`)
+  - filtre Paris (`postal_region` commencant par `75` pour arrets, `code_insee` commencant par `75` pour velib)
+
+### C. Services et sante
+- Bronze:
+  - `data/bronze/public_service_data/les_etablissements_hospitaliers_franciliens.csv`
+  - `data/bronze/public_service_data/BDCOM_2023.csv`
+  - `data/bronze/public_service_data/BDCOM_2023_OD.xlsx`
+- Silver outputs:
+  - `data/silver/hospitals_paris_clean.csv`
+  - `data/silver/bdcom_paris_clean.csv`
+- Fonctions:
+  - `src/silver/hospitals.py::process_hospitals()`
+  - `src/silver/bdcom.py::process_bdcom()`
+
+### D. Espaces verts
+- Bronze:
+  - `data/bronze/indice_vivabilite_familiale/espaces_verts.geojson`
+- Silver output:
+  - `data/silver/espaces_verts_paris.geojson`
+- Fonction:
+  - `src/silver/green_spaces.py::process_green_spaces()`
+- Regles:
+  - filtre ouvert/ferme via `_filter_open_spaces()`
+  - exclusion types decoratifs (`DECORATIVE_TYPES`)
+  - recalcul de `surface_totale_reelle` en EPSG:2154 si manquante
+
+### E. Referentiels IRIS/population
+- Bronze:
+  - `data/bronze/main_data/iris.xlsx`
+  - `data/bronze/main_data/iris.geojson`
+  - `data/bronze/main_data/base-ic-evol-struct-pop-2022.CSV`
+- Silver outputs:
+  - `data/silver/iris_paris.csv`
+  - `data/silver/population_paris.csv`
+- Fonctions:
+  - `src/silver/iris.py::process_iris()`
+  - `src/silver/population.py::process_population()`
+
+## 4) Calcul Gold: sous-scores et composite
+
+## 4.1 School score
+- Fichier: `src/gold/school_density.py`
+- Fonction: `compute_school_density()`
+- Sortie CSV: `data/gold/schools_score_iris.csv`
+- Table SQL: `school_density`
+- Logique:
+  - points ecoles en EPSG:4326 -> EPSG:2154
+  - buffer IRIS de `BUFFER_METERS` (500 m)
+  - jointure spatiale `sjoin(..., predicate="within")`
+  - `school_count` puis `schools_per_1000 = school_count / population * 1000`
+  - normalisation `_normalize_0_10()`
+
+## 4.2 Transport score (vivabilite)
+- Fichier: `src/gold/transport_score.py`
+- Fonction: `compute_transport_score()`
+- Sortie CSV: `data/gold/transport_score_iris.csv`
+- Table SQL: `transport_score`
+- Poids types (`src/config.py::TRANSPORT_WEIGHTS`):
+  - metro: 1.0
+  - rail: 1.2
+  - tram: 0.7
+  - bus: 0.4
+  - cableway: 0.5
+  - velib: 0.3
+- Logique:
+  - concat arrets + velib
+  - `weight = map(type)`
+  - buffer IRIS 500 m
+  - aggregation `stop_count`, `weighted_stops`
+  - normalisation `_normalize_0_10(weighted_stops)`
+
+## 4.3 Services score (legacy broad services)
+- Fichier: `src/gold/services_score.py`
+- Fonction: `compute_services_score()`
+- Sortie CSV: `data/gold/services_score_iris.csv`
+- Table SQL: `services_score`
+- Parametres:
+  - categories BDCOM `niv8 in {2,4}`
+  - `HOSPITAL_WEIGHT = 3.0`
+  - `BDCOM_WEIGHT = 1.0`
+- Logique:
+  - hopitaux (WGS84 -> EPSG:2154) + BDCOM (deja EPSG:2154)
+  - buffer IRIS 500 m
+  - `weighted_services = 3*hospital_count + 1*service_count`
+  - normalisation `_normalize_0_10(weighted_services)`
+
+## 4.4 Green spaces score
+- Fichier: `src/gold/green_spaces_score.py`
+- Fonction: `compute_green_spaces_score()`
+- Sortie CSV: `data/gold/green_spaces_score_iris.csv`
+- Table SQL: `green_spaces_score`
+- Parametres:
+  - `GREEN_SPACES_BUFFER_METERS = 300`
+  - `ADJACENT_BONUS = 0.5`
+- Logique:
+  - centroides des polygones espaces verts
+  - `interior_m2` (centroide dans IRIS)
+  - `adjacent_m2` (centroide dans buffer 300 m mais hors interieur)
+  - `total_green_m2 = interior_m2 + 0.5 * adjacent_m2`
+  - `green_m2_per_resident = total_green_m2 / population`
+  - normalisation `_normalize_0_10(green_m2_per_resident)`
+
+## 4.5 Family support sub-scores (nouvelle architecture)
+- Fichier: `src/gold/family_support_scores.py`
+- Fonction master: `compute_family_support_scores()`
+- Sous-fonctions:
+  - `compute_healthcare_score()` -> CSV `data/gold/healthcare_score_iris.csv`, table `healthcare_score`
+  - `compute_daily_services_score()` -> CSV `data/gold/daily_services_score_iris.csv`, table `daily_services_score`
+  - `compute_neutral_family_factors()` -> CSV `data/gold/family_missing_factors_iris.csv`, table `family_missing_factors`
+- Parametres:
+  - `HEALTHCARE_BDCOM_WEIGHT = 1.5`
+  - `HOSPITAL_WEIGHT = 3.0`
+  - `DAILY_SERVICE_WEIGHT = 1.0`
+  - `NEUTRAL_PLACEHOLDER_SCORE = 5.0` pour `childcare_score`, `safety_score`, `environment_score`
+
+## 4.6 Composite vivabilite familiale (version actuelle)
+- Fichier: `src/gold/vivabilite_familiale.py`
+- Fonction: `compute_vivabilite_familiale()`
+- Sortie CSV: `data/gold/vivabilite_familiale_iris.csv`
+- Table SQL: `vivabilite_familiale`
+- Inputs fusionnes:
+  - `schools_score_iris.csv`
+  - `transport_score_iris.csv`
+  - `services_score_iris.csv`
+  - `green_spaces_score_iris.csv`
+  - `healthcare_score_iris.csv`
+  - `daily_services_score_iris.csv`
+  - `family_missing_factors_iris.csv`
+- Regles:
+  - fallback valeurs manquantes: mediane de la colonne score
+  - `essential_connectivity_score` (transport + healthcare + daily services, 1/3 chacun)
+  - `vivabilite_score` par somme ponderee
+  - rangs: `vivabilite_rank`, `essential_connectivity_rank` (1 = meilleur)
+
+## 5) Normalisations utilisees
+
+### A. Min-max 0-10 (la plus utilisee)
+Fonction typique:
 
 ```
-Vivabilité Familiale = (Écoles × 0.25) + (Transport × 0.25) + (Services × 0.25) + (Espaces Verts × 0.25)
+if max == min:
+    score = 5.0
+else:
+    score = ((x - min) / (max - min) * 10).round(2)
 ```
 
-Chaque sous-score est normalisé 0–10 indépendamment (0 = pire zone de Paris, 10 = meilleure zone).  
-Le score composite est donc aussi sur une échelle 0–10 sans normalisation supplémentaire.
+Utilisee dans:
+- `src/gold/school_density.py::_normalize_0_10`
+- `src/gold/transport_score.py::_normalize_0_10`
+- `src/gold/services_score.py::_normalize_0_10`
+- `src/gold/green_spaces_score.py::_normalize_0_10`
+- `src/gold/family_support_scores.py::_normalize_0_10`
 
----
+### B. Min-max 0-1 (transport API uniquement)
+- `src/gold/transport_score.py::min_max_normalize`
+- Utilisee pour le dataset API `transport_indicator_iris.csv` (pas le composite vivabilite)
 
-## Architecture des données
+### C. Remplissage des manquants dans le composite
+- `src/gold/vivabilite_familiale.py`
+- Pour chaque score composant, `NaN -> mediane de la ville`
 
-```
-BRONZE (fichiers bruts)         SILVER (nettoyé, fichiers only)        GOLD (scores + DB)
-────────────────────────        ───────────────────────────────        ─────────────────────────────────────────
-schools/*.xlsx              →   schools_merged.csv              ──→   schools_score_iris.csv   + DB: school_density
-espaces_verts.geojson       →   espaces_verts_paris.geojson     ──→   green_spaces_score_iris.csv + DB: green_spaces_score
-transport/arrets.csv        →   transport_arrets_paris.csv      ──→   transport_score_iris.csv + DB: transport_score
-transport/velib.csv         →   velib_paris.csv                 ──┘
-BDCOM_2023.csv              →   bdcom_paris_clean.csv           ──→   services_score_iris.csv  + DB: services_score
-hospitals.csv               →   hospitals_paris_clean.csv       ──┘
-                                                                       vivabilite_familiale_iris.csv + DB: vivabilite_familiale
-```
+## 6) Poids officiels (implementation actuelle)
 
----
+Source: `src/config.py`
 
-## Pilier 1 — Écoles (25 %)
+### VIVABILITE_WEIGHTS
+- `school_score`: 0.20
+- `childcare_score`: 0.15
+- `safety_score`: 0.20
+- `healthcare_score`: 0.15
+- `environment_score`: 0.15
+- `green_spaces_score`: 0.075
+- `transport_score`: 0.05
+- `daily_services_score`: 0.025
 
-**Objectif** : Mesurer l'accessibilité aux établissements scolaires depuis chaque zone IRIS.
+### ESSENTIAL_CONNECTIVITY_WEIGHTS
+- `transport_score`: 1/3
+- `healthcare_score`: 1/3
+- `daily_services_score`: 1/3
 
-**Sources Bronze** :
-- `indice_vivabilite_familiale/etablissements-scolaires-colleges.xlsx`
-- `indice_vivabilite_familiale/etablissements-scolaires-ecoles-elementaires.xlsx`
-- `indice_vivabilite_familiale/etablissements-scolaires-maternelles.xlsx`
+## 7) Colonnes SQL: table finale `vivabilite_familiale`
 
-**Pipeline** :
-- Silver : `src/silver/schools.py` → `schools_merged.csv` (fusion des 3 fichiers, dédoublonnage, filtre Paris)
-- Gold  : `src/gold/school_density.py` → compte les établissements dans un rayon de 500 m autour de chaque zone IRIS (buffer spatial Lambert-93), rapporté à la population
+Definition referencee dans `api/db_models.py::vivabilite_familiale`.
 
-**Formule** :
-```
-schools_per_1000 = nb_écoles_500m / population × 1000
-school_score = normaliser(schools_per_1000) sur [0, 10]
-```
+- Meta:
+  - `IRIS`, `LIBCOM`, `LIBIRIS`, `GRD_QUART`, `population`, `code_iris`
+- Ecoles:
+  - `school_count`, `schools_per_1000`, `school_score`
+- Transport:
+  - `stop_count`, `weighted_stops`, `transport_score`
+- Services legacy:
+  - `hospital_count`, `service_count`, `weighted_services`, `services_score`
+- Espaces verts:
+  - `interior_m2`, `adjacent_m2`, `total_green_m2`, `green_m2_per_resident`, `green_spaces_score`
+- Healthcare:
+  - `healthcare_hospital_count`, `weighted_hospital_count`, `healthcare_service_count`, `weighted_healthcare_service_count`, `weighted_healthcare_access`, `healthcare_score`
+- Daily services:
+  - `daily_service_count`, `weighted_daily_service_count`, `daily_services_score`
+- Facteurs neutres:
+  - `childcare_score`, `safety_score`, `environment_score`
+- Composites:
+  - `essential_connectivity_score`, `essential_connectivity_weights`
+  - `vivabilite_score`, `vivabilite_model`, `vivabilite_weights`, `vivabilite_rank`, `essential_connectivity_rank`
 
-**Granularité** : IRIS (~992 zones)
+## 8) API: exposition de l'indicateur
 
----
+Routeur: `api/routers/indicators/vivabilite.py`  
+Service: `api/services/indicators/vivabilite_service.py`
 
-## Pilier 2 — Transport (25 %)
+Endpoints:
+- `GET /indicators/vivabilite-familiale`
+  - pagination + filtres `arrondissement`, `min_score`, `max_score`
+- `GET /indicators/vivabilite-familiale/{code_iris}`
+- `GET /indicators/vivabilite-familiale/arrondissements`
+- `GET /indicators/vivabilite-familiale/arrondissements/{arrondissement}`
 
-**Objectif** : Mesurer l'accessibilité aux transports en commun et au vélib depuis chaque zone IRIS.
+Modele de reponse:
+- `api/models/indicators/vivabilite.py::VivabiliteIndicator`
+- `api/models/indicators/vivabilite.py::VivabiliteArrondissementStats`
 
-**Sources Bronze** :
-- `transport_data/arrets.csv` — arrêts RATP/SNCF (métro, RER, bus, tram, câble)
-- `transport_data/velib.csv` — stations Vélib
+## 8.1) Comment l'API est rendue dans le front (rendering)
 
-**Pipeline** :
-- Silver : `src/transport.py` → `transport_arrets_paris.csv` + `velib_paris.csv`
-  (filtre Paris via code postal/INSEE, extraction coordonnées, normalisation du type)
-- Gold  : `src/gold/transport_score.py` → buffer 500 m par IRIS, jointure spatiale, somme pondérée
+### A. Point d'entree front
+- Client API front: `web/src/lib/api.ts`
+- Page principale (landing): `web/src/app/page.tsx`
+- Rendu map principal: `web/src/components/EnhancedMapDashboard.tsx`
+- Version map simple (legacy/demo): `web/src/components/MapDashboard.tsx`
 
-**Pondérations par type d'arrêt** (définies dans `src/config.py`) :
+### B. Chaine de rendu (backend -> frontend -> UI)
 
-| Type | Poids | Raison |
-|------|-------|--------|
-| rail (RER/Transilien) | 1.2 | Connectivité maximale |
-| metro | 1.0 | Transport urbain principal |
-| tram | 0.7 | |
-| cableway | 0.5 | |
-| bus | 0.4 | Réseau dense mais moins impactant |
-| velib | 0.3 | Mobilité douce |
+1. Backend expose les endpoints FastAPI (ex: `/map/vivabilite-familiale`, `/indicators/vivabilite-familiale`, etc.)
+2. `web/src/lib/api.ts` appelle ces endpoints avec `fetch(...)`
+3. `EnhancedMapDashboard.tsx` charge les donnees via `useEffect` + fonctions `fetch...`
+4. Les donnees GeoJSON sont injectees dans Mapbox via:
+   - `<Source data={...} type="geojson">`
+   - `<Layer ...>` pour coloration/contours
+5. Les interactions utilisateur (hover/click/sidebar) lisent `feature.properties` pour afficher:
+   - popup map
+   - panneau details
+   - classement ("Top matches")
+   - filtres dynamiques (score mini, arrondissement, recherche)
 
-**Formule** :
-```
-weighted_stops = Σ (nb_arrêts_type × poids_type) pour tous les types dans 500 m
-transport_score = normaliser(weighted_stops) sur [0, 10]
-```
+### C. Endpoints effectivement rendus et emplacement UI
 
-**Granularité** : IRIS (~992 zones)
+- `GET /map/vivabilite-familiale`
+  - Appel: `fetchVivabiliteMap()` dans `web/src/lib/api.ts`
+  - Rendu: couche carte principale dans `EnhancedMapDashboard.tsx`
+  - Utilisation UI:
+    - coloration des polygones (score actif)
+    - popup zone (nom, score, rank)
+    - panneau details droite
+    - classement sidebar
 
----
+- `GET /map/vivabilite-familiale/arrondissement`
+  - Appel: `fetchVivabiliteArrondissement()`
+  - Rendu: couche de fallback quand zoom faible (`currentZoom < ZOOM_BREAK`)
+  - Utilisation UI:
+    - agrandit la lecture macro de Paris avant zoom IRIS
 
-## Pilier 3 — Services (25 %)
+- `GET /indicators/transport/points`
+  - Appel: `fetchTransportPoints()`
+  - Rendu: source GeoJSON transport + layers clusters/points/labels
+  - Utilisation UI:
+    - markers Metro/RER/Tram/Bus/Velib
+    - popup station au clic
+    - filtres par type dans la sidebar
 
-**Objectif** : Mesurer la proximité aux services essentiels pour les familles (santé + services du quotidien).
+- `GET /map/thermal-comfort`
+  - Appel: `fetchThermalComfortMap()`
+  - Rendu: meme composant map, metrique thermique active
+  - Utilisation UI:
+    - bascule indicateur principal "Confort thermique"
 
-**Sources Bronze** :
-- `public_service_data/les_etablissements_hospitaliers_franciliens.csv` — hôpitaux IDF
-- `public_service_data/BDCOM_2023.csv` + `BDCOM_2023_OD.xlsx` — commerces et services parisiens
+- `GET /map/housing/rent`
+  - Appel: `fetchRentMap()`
+  - Rendu: couche logement (metrique loyer)
+  - Utilisation UI:
+    - score d'abordabilite locative
+    - enrichissement panneau details (loyer median)
 
-**Pipeline** :
-- Silver : `src/silver/hospitals.py` → `hospitals_paris_clean.csv` (filtre Paris, coordonnées WGS84)
-- Silver : `src/silver/bdcom.py` → `bdcom_paris_clean.csv` (fusion BDCOM + dictionnaire activités)
-- Gold  : `src/gold/services_score.py` → buffer 500 m par IRIS, jointure spatiale sur les deux sources
+- `GET /map/housing/sale`
+  - Appel: `fetchSaleMap()`
+  - Rendu: couche logement (metrique achat)
+  - Utilisation UI:
+    - score d'abordabilite achat
+    - enrichissement panneau details (prix median m2)
 
-**Filtrage BDCOM** : catégories `niv8 ∈ {2, 4}` uniquement :
-- `niv8 = 2` : Alimentaire (épiceries, supermarchés, boulangeries…)
-- `niv8 = 4` : Service commercial (pharmacies, banques, La Poste, pressing…)
+- `GET /map/demographics`
+  - Appel: `fetchDemographicsMap()`
+  - Rendu: couche demographie
+  - Utilisation UI:
+    - revenus, gini, CSP selon metriques selectionnees
 
-**Pondérations** :
-- Hôpital : ×3 (importance critique pour les familles)
-- Service BDCOM : ×1
+- `GET /bdcom/by-iris/{codeIris}`
+  - Appel: `fetchBdcomByIris(codeIris)`
+  - Rendu: panneau details zone selectionnee
+  - Utilisation UI:
+    - nombre d'etablissements, activites top, surface moyenne
 
-**Formule** :
-```
-weighted_services = (nb_hôpitaux × 3) + (nb_services_bdcom × 1) dans 500 m
-services_score = normaliser(weighted_services) sur [0, 10]
-```
+- `GET /dvf/by-iris/{codeIris}`
+  - Appel: `fetchDvfByIris(codeIris)`
+  - Rendu: panneau details zone selectionnee
+  - Utilisation UI:
+    - nb transactions, median prix/m2, median surface
 
-> **Note technique** : les coordonnées BDCOM (colonnes X, Y) sont en Lambert-93 (EPSG:2154) — elles sont utilisées directement sans conversion. Les coordonnées des hôpitaux (lat, lng) sont en WGS84 (EPSG:4326) et sont reprojetées en EPSG:2154 avant la jointure spatiale.
+### D. Details techniques de rendu
 
-**Granularité** : IRIS (~992 zones)
+- Le rendu cartographique se fait avec `react-map-gl/mapbox`.
+- Les polygones sont rendus via:
+  - `Source id="vivabilite-source"` + `Layer fill/outline/active`.
+- Les points transport sont rendus via:
+  - `Source id="transport-source"` + layers cluster/circle/symbol.
+- Les proprietes map (`feature.properties`) sont enrichies localement:
+  - `buildComputedGeojson(...)` calcule score actif/rank/percentile pour l'UI.
+- Les filtres sont appliques cote front:
+  - `filterComputedGeojson(...)` pour recherche, arrondissement, score minimum.
 
----
+## 9) Ecriture en base de donnees
 
-## Pilier 4 — Espaces Verts (25 %)
+Connexion DB: `src/db.py`
 
-**Objectif** : Mesurer la surface d'espaces verts accessibles par habitant, avec un bonus pour les espaces verts à proximité immédiate.
+- moteur SQLAlchemy cree depuis `.env`:
+  - `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `DB_NAME`
+- chaque etape Gold persiste en SQL via:
+  - `DataFrame.to_sql("<table_name>", engine, if_exists="replace", index=False)`
 
-**Source Bronze** :
-- `indice_vivabilite_familiale/espaces_verts.geojson` — 2 528 polygones, opendata Paris, EPSG:4326
-
-**Pipeline** :
-- Silver : `src/silver/green_spaces.py` → `espaces_verts_paris.geojson`
-  - Filtre : `ouvert_ferme == 'Ouvert'`
-  - Suppression des décorations sur la voie publique (jardinières, etc.)
-  - Recalcul de `surface_totale_reelle` si manquante (depuis la géométrie en EPSG:2154)
-- Gold  : `src/gold/green_spaces_score.py` → jointure spatiale par centroïdes
-
-**Formule** :
-```
-Pour chaque zone IRIS :
-  interior_m2  = Σ surface des espaces verts dont le centroïde est dans l'IRIS
-  adjacent_m2  = Σ surface des espaces verts dont le centroïde est dans un buffer
-                   de 300 m autour de l'IRIS mais pas à l'intérieur
-  total_green_m2 = interior_m2 + 0.5 × adjacent_m2
-  green_m2_per_resident = total_green_m2 / population
-  green_spaces_score = normaliser(green_m2_per_resident) sur [0, 10]
-```
-
-> Le bonus 50 % pour les espaces verts adjacents reflète le fait qu'un parc à 200 m est accessible à pied mais contribue moins qu'un parc dans la zone même.
-
-**Granularité** : IRIS (~992 zones)
-
----
-
-## Score Composite
-
-**Script** : `src/gold/vivabilite_familiale.py`  
-**DB table** : `vivabilite_familiale`  
-**Fichier Gold** : `data/gold/vivabilite_familiale_iris.csv`
-
-**Colonnes de sortie** :
-
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `IRIS` | str(9) | Code INSEE IRIS (9 chiffres, zero-padded) |
-| `code_iris` | str(9) | Identique à IRIS |
-| `LIBCOM` | str | Libellé arrondissement (ex : "Paris 7e Arrondissement") |
-| `LIBIRIS` | str | Nom de la zone IRIS |
-| `GRD_QUART` | str | Code grand quartier |
-| `population` | float | Population résidente (INSEE 2022) |
-| `school_score` | float | Score écoles 0–10 |
-| `transport_score` | float | Score transport 0–10 |
-| `services_score` | float | Score services 0–10 |
-| `green_spaces_score` | float | Score espaces verts 0–10 |
-| `vivabilite_score` | float | Score composite 0–10 |
-| `vivabilite_rank` | int | Rang Paris (1 = meilleure zone) |
-
----
-
-## API
-
-Le score est exposé via l'API FastAPI sous le préfixe `/indicators/vivabilite-familiale`.
-
-| Méthode | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/indicators/vivabilite-familiale` | Liste paginée, triée par rang, filtrable |
-| GET | `/indicators/vivabilite-familiale/{code_iris}` | Score pour une zone IRIS spécifique |
-| GET | `/indicators/vivabilite-familiale/arrondissements` | Agrégat par arrondissement |
-| GET | `/indicators/vivabilite-familiale/arrondissements/{name}` | Un arrondissement |
-
-**Paramètres de filtre (liste paginée)** :
-- `arrondissement` — correspondance partielle insensible à la casse
-- `min_score` / `max_score` — filtre sur `vivabilite_score` (0–10)
-- `page` / `size` — pagination standard
-
----
-
-## Comment lancer
+## 10) Commandes d'execution
 
 ```bash
-# Pipeline complet (télécharge Bronze → Silver → Gold → écrit en DB)
+# complet: Bronze -> Silver -> Gold
 python run_pipeline.py
 
-# Silver seulement (nettoyage des fichiers bruts)
+# uniquement Silver
 python run_pipeline.py --silver
 
-# Gold seulement (recalcul des scores, requiert que Silver existe)
+# uniquement Gold (Silver deja present)
 python run_pipeline.py --gold
 ```
 
-Les 5 tables DB mises à jour par ce pipeline :
+## 11) Notes importantes de coherence
 
-| Table DB | Script | Contenu |
-|----------|--------|---------|
-| `school_density` | `gold/school_density.py` | Score écoles par IRIS |
-| `transport_score` | `gold/transport_score.py` | Score transport par IRIS |
-| `services_score` | `gold/services_score.py` | Score services par IRIS |
-| `green_spaces_score` | `gold/green_spaces_score.py` | Score espaces verts par IRIS |
-| `vivabilite_familiale` | `gold/vivabilite_familiale.py` | Score composite + rang par IRIS |
-
----
-
-## Décisions de conception
-
-### Pourquoi ces 4 piliers ?
-
-| Pilier | Pourquoi inclus | Pourquoi pas la sécurité |
-|--------|----------------|--------------------------|
-| Écoles | Besoin direct des familles | — |
-| Transport | Pratique quotidien (trajets école, activités) | — |
-| Services | Services de santé + alimentation + services du quotidien | — |
-| Espaces verts | Jeux enfants, air libre, qualité de vie | — |
-| ~~Sécurité~~ | ~~25 %~~ | Données SSMSI disponibles uniquement à l'échelle arrondissement (20 zones) — insuffisant face aux autres piliers à l'échelle IRIS (~992 zones). Conservé comme couche contextuelle possible. |
-
-### Pourquoi IRIS et pas arrondissement ?
-
-Les coordonnées GPS des écoles, arrêts de transport, hôpitaux, BDCOM et espaces verts permettent des jointures spatiales à résolution IRIS. L'échelle IRIS (~992 zones vs 20 arrondissements) révèle des disparités intra-arrondissement invisibles autrement — objectif explicite du projet.
-
-### Normalisation
-
-Min-max sur l'ensemble des zones IRIS parisiennes. La zone avec le score brut le plus faible obtient 0, la meilleure obtient 10. Les autres se positionnent proportionnellement. Un sous-score manquant est remplacé par la médiane de la ville (fallback gracieux).
+- La documentation ancienne "4 piliers a 25%" n'est plus la formule active dans le code.
+- Le code actif utilise un composite elargi (`VIVABILITE_WEIGHTS`) avec des facteurs neutres (5.0) tant que certaines donnees IRIS ne sont pas disponibles.
+- Le champ `services_score` est encore conserve dans la table finale, mais le composite principal actuel s'appuie surtout sur `healthcare_score` et `daily_services_score` pour la composante services du quotidien.

@@ -15,37 +15,43 @@ Run only the silver → gold step (requires silver to exist):
 import argparse
 
 from src.data_loader import load_data
-from src.gold.green_spaces_score import compute_green_spaces_score
-from src.gold.family_support_scores import compute_family_support_scores
-from src.gold.reference import load_reference_tables
-from src.gold.school_density import compute_school_density
-from src.gold.services_score import compute_services_score
-from src.gold.transport_score import (
-    compute_transport_indicator_score,
-    compute_transport_score,
+from src.indicators.bdcom import process_bdcom, process_bdcom_gold
+from src.indicators.demographics import process_demographics_gold, process_demographics_silver
+from src.indicators.dvf import process_dvf, process_dvf_gold
+from src.indicators.foundation import (
+    load_reference_tables,
+    process_iris,
+    process_population,
 )
-from src.gold.build_bdcom_pipeline import process_bdcom_gold
-from src.gold.dvf import process_dvf_gold
+from src.indicators.housing_market import (
+    process_rent_data_to_gold,
+    process_rent_data_to_silver,
+    process_sale_price_median_to_gold,
+    process_sale_price_median_to_silver,
+)
+from src.indicators.thermal_comfort import (
+    process_thermal_comfort_gold,
+    process_thermal_comfort_silver,
+)
+from src.indicators.transport import (
+    compute_transport_indicator_score,
+    compute_transport_points,
+    compute_transport_score,
+    process_transport,
+)
+from src.indicators.vivabilite_familiale import (
+    compute_family_support_scores,
+    compute_green_spaces_score,
+    compute_school_density,
+    compute_services_score,
+    compute_vivabilite_familiale,
+)
+from src.indicators.vivabilite_familiale.silver import (
+    process_green_spaces,
+    process_hospitals,
+    process_schools,
+)
 
-from src.gold.transport_points import compute_transport_points
-from src.gold.vivabilite_familiale import compute_vivabilite_familiale
-from src.silver.bdcom import process_bdcom
-from src.silver.dvf import process_dvf
-from src.silver.green_spaces import process_green_spaces
-from src.silver.hospitals import process_hospitals
-from src.silver.iris import process_iris
-from src.silver.population import process_population
-from src.silver.rent_data_to_silver import process_rent_data_to_silver
-from src.silver.schools import process_schools
-from src.silver.thermal_comfort_to_silver import process_thermal_comfort_silver
-from src.gold.thermal_comfort_to_gold import process_thermal_comfort_gold
-from src.gold.sale_price_median_to_gold import process_sale_price_median_to_gold
-from src.silver.sale_price_median_to_silver import process_sale_price_median_to_silver
-from src.gold.rent_data_to_gold import process_rent_data_to_gold
-from src.silver.demographics_to_silver import process_demographics_silver
-from src.gold.demographics_to_gold import process_demographics_gold
-
-from src.silver.transport import process_transport
 
 def run_bronze() -> None:
     print("─" * 40)
@@ -72,6 +78,7 @@ def run_silver() -> None:
     process_transport()
     process_demographics_silver()
 
+
 def run_gold() -> None:
     print("─" * 40)
     print("Silver → Gold")
@@ -89,17 +96,15 @@ def run_gold() -> None:
     compute_green_spaces_score()
     compute_family_support_scores()
     compute_vivabilite_familiale()
-    process_thermal_comfort_gold()
-    process_sale_price_median_to_gold()
-    process_rent_data_to_gold()
     process_bdcom_gold()
     process_dvf_gold()
     process_demographics_gold()
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the indice familiale pipeline.")
     parser.add_argument("--silver", action="store_true", help="Run bronze→silver only")
-    parser.add_argument("--gold",   action="store_true", help="Run silver→gold only")
+    parser.add_argument("--gold", action="store_true", help="Run silver→gold only")
     args = parser.parse_args()
 
     if args.silver:

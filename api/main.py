@@ -29,12 +29,28 @@ from api.routers import (
     stats,
     zone_analytics,
 )
-from api.routers import iris, map as map_router, population, schools, stats, bdcom, dvf
 from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
 from api.routers.indicators import thermal_comfort
 from api.services.spatial_cache import get_spatial_store
+
+# (router, url prefix, OpenAPI tags) — order matches Swagger grouping
+_API_ROUTES: list[tuple] = [
+    (auth_router.router, "/auth", ["Auth"]),
+    (iris.router, "/iris", ["IRIS Zones"]),
+    (population.router, "/population", ["Population"]),
+    (schools.router, "/schools", ["Schools"]),
+    (indicator_schools.router, "/indicators/schools", ["Indicators — Schools"]),
+    (indicator_vivabilite.router, "/indicators/vivabilite-familiale", ["Indicators — Vivabilité Familiale"]),
+    (indicator_transport.router, "/indicators/transport", ["Indicators — Transport"]),
+    (map_router.router, "/map", ["Map Layers"]),
+    (stats.router, "/stats", ["Statistics"]),
+    (bdcom.router, "/bdcom", ["BDCom"]),
+    (dvf.router, "/dvf", ["DVF"]),
+    (zone_analytics.router, "/analytics/zone-clicks", ["Analytics — Zone interest"]),
+    (thermal_comfort.router, "/indicators/thermal-comfort", ["Thermal Comfort"]),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -76,40 +92,8 @@ def create_app() -> FastAPI:
     # -----------------------------------------------------------------------
     # Routers
     # -----------------------------------------------------------------------
-    app.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
-    app.include_router(iris.router, prefix="/iris", tags=["IRIS Zones"])
-    app.include_router(population.router, prefix="/population", tags=["Population"])
-    app.include_router(schools.router, prefix="/schools", tags=["Schools"])
-    app.include_router(
-        indicator_schools.router,
-        prefix="/indicators/schools",
-        tags=["Indicators — Schools"],
-    )
-    app.include_router(
-        indicator_vivabilite.router,
-        prefix="/indicators/vivabilite-familiale",
-        tags=["Indicators — Vivabilité Familiale"],
-    )
-    app.include_router(
-        indicator_transport.router,
-        prefix="/indicators/transport",
-        tags=["Indicators — Transport"],
-    )
-    app.include_router(map_router.router, prefix="/map", tags=["Map Layers"])
-    app.include_router(stats.router, prefix="/stats", tags=["Statistics"])
-    app.include_router(bdcom.router, prefix="/bdcom", tags=["BDCom"])
-    app.include_router(dvf.router, prefix="/dvf", tags=["DVF"])
-    app.include_router(
-        zone_analytics.router,
-        prefix="/analytics/zone-clicks",
-        tags=["Analytics — Zone interest"],
-    )
-
-    app.include_router(
-        thermal_comfort.router,
-        prefix="/indicators/thermal-comfort",
-        tags=["Thermal Comfort"])
-
+    for router, prefix, tags in _API_ROUTES:
+        app.include_router(router, prefix=prefix, tags=tags)
 
     # -----------------------------------------------------------------------
     # Root / health endpoints

@@ -64,7 +64,6 @@ Dockerfile.api              FastAPI image (repo root)
 docker-compose.yml          Local stack: MongoDB, API, Next.js web
 web/Dockerfile              Next.js production image (standalone output)
 
-exploration/                Jupyter notebooks (EDA, prototyping)
 run_pipeline.py             Pipeline entry point
 .github/workflows/        GitHub Actions — scheduled/manual data pipeline runs
 ```

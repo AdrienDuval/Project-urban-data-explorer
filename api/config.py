@@ -6,6 +6,8 @@ truth.  Only API-specific settings (metadata, CORS, etc.) live here.
 
 from __future__ import annotations
 
+import os
+
 # Re-export pipeline paths so callers only need one import
 from src.config import (  # noqa: F401
     POPULATION_SILVER,
@@ -38,11 +40,16 @@ Bronze → Silver → Gold data pipeline.
 """
 API_VERSION = "0.1.0"
 
-# Allowed CORS origins — extend for deployed frontends
-CORS_ORIGINS = [
+# Allowed CORS origins — extend via CORS_EXTRA_ORIGINS (comma-separated), e.g.
+# CORS_EXTRA_ORIGINS=http://10.101.8.226:3000,http://192.168.1.42:3000
+_DEFAULT_CORS_ORIGINS = [
     "http://localhost",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://[::1]:3000",
     "http://localhost:5173",
 ]
+_extra_raw = os.environ.get("CORS_EXTRA_ORIGINS", "").strip()
+_extra = [o.strip() for o in _extra_raw.split(",") if o.strip()]
+CORS_ORIGINS = list(dict.fromkeys([*_DEFAULT_CORS_ORIGINS, *_extra]))
 

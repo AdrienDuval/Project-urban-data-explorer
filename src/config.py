@@ -134,18 +134,15 @@ TRANSPORT_WEIGHTS = {
 }
 
 # ── Vivabilité familiale composite weights ────────────────────────────────────
-# Only pillars with real per-IRIS data. Equal weight (0.20 each).
-# Non-price family suitability score. Childcare, safety, and environment use a
-# flat neutral sub-score (5.0) until per-IRIS data is available.
+# Only pillars that vary by IRIS in Gold. Childcare, safety, and environment
+# are still written to vivabilite_familiale (flat 5.0 placeholders) but are not
+# part of vivabilite_score until real per-zone data exists.
 VIVABILITE_WEIGHTS = {
-    "school_score":         0.20,
-    "childcare_score":      0.15,
-    "safety_score":         0.20,
-    "healthcare_score":     0.15,
-    "environment_score":    0.15,
-    "green_spaces_score":   0.075,
-    "transport_score":      0.05,
-    "daily_services_score": 0.025,
+    "school_score":         0.40,
+    "healthcare_score":     0.30,
+    "green_spaces_score":   0.15,
+    "transport_score":      0.10,
+    "daily_services_score": 0.05,
 }
 
 # ── Essential connectivity & services composite weights ───────────────────────

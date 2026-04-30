@@ -38,6 +38,35 @@ def _clean_value(value: Any) -> Any:
     return value
 
 
+def _demographics_zone_display_name(
+    score: dict[str, Any],
+    props: dict[str, Any],
+    code_iris: str,
+) -> str:
+    """IRIS label from DB (LAB_IRIS → nom_iris) or GeoJSON; never small integers as titles."""
+    candidates: list[Any] = [
+        _clean_value(score.get("nom_iris")),
+        props.get("nom_iris"),
+        props.get("NOM_IRIS"),
+    ]
+    for raw in candidates:
+        if raw is None:
+            continue
+        if isinstance(raw, (bytes, bytearray)):
+            try:
+                raw = raw.decode("utf-8")
+            except Exception:
+                continue
+        if isinstance(raw, str):
+            label = raw.strip()
+            if label:
+                return label
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+            # GeoJSON or mis-typed columns sometimes store 1, 2, 3 instead of LIB_IRIS text.
+            continue
+    return f"IRIS {code_iris}"
+
+
 def _arrondissement_label(code: Any) -> str | None:
     if code is None:
         return None
@@ -130,29 +159,28 @@ def build_vivabilite_geojson(spatial: SpatialStore) -> dict[str, Any]:
         if not code_iris.startswith("75"):
             continue
         score = scores_by_iris.get(code_iris)
-        if score is None:
-            map_properties: dict[str, Any] = {
-                "code_iris": code_iris,
-                "name": properties.get("nom_iris"),
-                "arrondissement": properties.get("nom_com"),
-                "quarter_code": None,
-                "geography": "iris",
-                "no_data": True,
-                "typ_iris": properties.get("typ_iris"),
-            }
-        else:
+        base_props: dict[str, Any] = {
+            "code_iris": code_iris,
+            "name": properties.get("nom_iris"),
+            "arrondissement": properties.get("nom_com"),
+            "quarter_code": None,
+            "geography": "iris",
+            "typ_iris": properties.get("typ_iris"),
+        }
+        if isinstance(score, dict):
             map_properties = {
-                "code_iris": code_iris,
+                **base_props,
                 "name": _clean_value(score.get("LIBIRIS")) or properties.get("nom_iris"),
                 "arrondissement": _clean_value(score.get("LIBCOM")) or properties.get("nom_com"),
                 "quarter_code": _clean_value(score.get("GRD_QUART")),
-                "geography": "iris",
                 "no_data": False,
             }
-        for key, value in score.items():
-            if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
-                continue
-            map_properties[key] = _clean_value(value)
+            for key, value in score.items():
+                if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
+                    continue
+                map_properties[key] = _clean_value(value)
+        else:
+            map_properties = {**base_props, "no_data": True}
 
         joined_features.append({
             "type": "Feature",
@@ -318,7 +346,7 @@ def build_demographics_geojson(spatial: SpatialStore) -> dict[str, Any]:
             "properties": {
                 "map_id": code_iris,
                 "code_iris": code_iris,
-                "name": _clean_value(score.get("nom_iris")) or props.get("nom_iris"),
+                "name": _demographics_zone_display_name(score, props, code_iris),
                 "arrondissement": _clean_value(score.get("arrondissement"))
                     or _arrondissement_label(code_iris[3:5]),
                 "geography": "iris",
