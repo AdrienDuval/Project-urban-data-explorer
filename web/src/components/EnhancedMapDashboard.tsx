@@ -13,8 +13,6 @@ import Map, {
 } from "react-map-gl/mapbox";
 
 import {
-  fetchBdcomByIris,
-  fetchDvfByIris,
   fetchRentMap,
   fetchSaleMap,
   fetchThermalComfortMap,
@@ -22,8 +20,6 @@ import {
   fetchVivabiliteMap,
 } from "@/lib/api";
 import type {
-  BdcomIrisStats,
-  DvfIrisStats,
   IndicatorMapFeatureCollection,
   IndicatorMapProperties,
   TransportPoint,
@@ -1335,9 +1331,6 @@ function DetailsPanel({
   weights,
   mainIndicator,
   selectedMetric,
-  bdcomData,
-  dvfData,
-  irisDataLoading,
   onClose,
   onDismissPanel,
 }: {
@@ -1348,9 +1341,6 @@ function DetailsPanel({
   weights: Weights;
   mainIndicator: MainIndicator;
   selectedMetric: MetricKey;
-  bdcomData: BdcomIrisStats | null;
-  dvfData: DvfIrisStats | null;
-  irisDataLoading: boolean;
   onClose: () => void;
   onDismissPanel: () => void;
 }) {
@@ -1476,78 +1466,6 @@ function DetailsPanel({
         ) : null}
       </div>
 
-      {selected ? (
-        irisDataLoading ? (
-          <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
-            <p className="text-[11px] text-slate-400">Loading commerce data…</p>
-          </div>
-        ) : (bdcomData && bdcomData.total_establishments > 0) || (dvfData && dvfData.total_transactions > 0) ? (
-          <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
-            <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-              Commerce &amp; Transactions
-            </p>
-            {bdcomData && bdcomData.total_establishments > 0 ? (
-              <>
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500">Establishments</span>
-                  <span className="font-semibold text-slate-950">
-                    {bdcomData.total_establishments}
-                  </span>
-                </div>
-                {bdcomData.avg_surface_m2 > 0 ? (
-                  <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">Avg surface</span>
-                    <span className="font-semibold text-slate-950">
-                      {bdcomData.avg_surface_m2.toFixed(0)} m²
-                    </span>
-                  </div>
-                ) : null}
-                {bdcomData.top_activities[0] ? (
-                  <div className="mt-1.5 flex items-start justify-between gap-2 text-[11px]">
-                    <span className="shrink-0 text-slate-500">Top activity</span>
-                    <span className="truncate text-right font-semibold text-slate-950">
-                      {bdcomData.top_activities[0].activity}
-                    </span>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-            {dvfData && dvfData.total_transactions > 0 ? (
-              <div
-                className={
-                  bdcomData && bdcomData.total_establishments > 0
-                    ? "mt-2 border-t border-slate-200 pt-2"
-                    : ""
-                }
-              >
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500">Transactions (DVF)</span>
-                  <span className="font-semibold text-slate-950">
-                    {dvfData.total_transactions}
-                  </span>
-                </div>
-                {dvfData.median_prix_m2 > 0 ? (
-                  <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">Median price</span>
-                    <span className="font-semibold text-slate-950">
-                      {formatNumber(dvfData.median_prix_m2)} €/m²
-                    </span>
-                  </div>
-                ) : null}
-                {dvfData.median_surface_m2 > 0 ? (
-                  <div className="mt-1.5 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500">Median surface</span>
-                    <span className="font-semibold text-slate-950">
-                      {dvfData.median_surface_m2.toFixed(0)} m²
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null
-      ) : null}
-
       {bestPillar && weakestPillar ? (
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <div className="rounded-lg bg-emerald-50 p-2">
@@ -1628,9 +1546,6 @@ export function EnhancedMapDashboard() {
   const [showDetails, setShowDetails] = useState(true);
   const [showHoverPreview, setShowHoverPreview] = useState(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
-  const [bdcomIrisData, setBdcomIrisData] = useState<BdcomIrisStats | null>(null);
-  const [dvfIrisData, setDvfIrisData] = useState<DvfIrisStats | null>(null);
-  const [irisDataLoading, setIrisDataLoading] = useState(false);
 
   useEffect(() => {
     if (uiHidden) {
@@ -1665,34 +1580,6 @@ export function EnhancedMapDashboard() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    // Fetch commercial and housing transaction data for the selected IRIS zone.
-    // selectedCode is the map_id; for IRIS zones it is the 9-digit code_iris.
-    if (!selectedCode || !/^\d{9}$/.test(selectedCode)) {
-      setBdcomIrisData(null);
-      setDvfIrisData(null);
-      setIrisDataLoading(false);
-      return;
-    }
-
-    let active = true;
-    setIrisDataLoading(true);
-
-    Promise.all([
-      fetchBdcomByIris(selectedCode).catch(() => null),
-      fetchDvfByIris(selectedCode).catch(() => null),
-    ]).then(([bdcom, dvf]) => {
-      if (!active) return;
-      setBdcomIrisData(bdcom);
-      setDvfIrisData(dvf);
-      setIrisDataLoading(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [selectedCode]);
 
   useEffect(() => {
     let active = true;
@@ -2290,10 +2177,7 @@ export function EnhancedMapDashboard() {
             {!uiHidden && showDetails ? (
               <DetailsPanel
                 averageScore={stats.averageScore}
-                bdcomData={bdcomIrisData}
-                dvfData={dvfIrisData}
                 featureCount={stats.featureCount}
-                irisDataLoading={irisDataLoading}
                 mainIndicator={mainIndicator}
                 onClose={() => {
                   setSelectedCode(null);

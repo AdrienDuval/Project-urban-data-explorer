@@ -35,8 +35,6 @@ COLUMNS_TO_KEEP = [
     "Surface reelle bati",
     "Nombre pieces principales",
     "Nature culture",
-    "Longitude",
-    "Latitude",
 ]
 
 
@@ -130,8 +128,6 @@ def process_dvf() -> pd.DataFrame:
         "Surface reelle bati"      : "surface_m2",
         "Nombre pieces principales": "nb_pieces",
         "Nature culture"           : "nature_culture",
-        "Longitude"                : "longitude",
-        "Latitude"                 : "latitude",
     })
 
     # ── Save ──────────────────────────────────────────────────────────────────

@@ -87,65 +87,6 @@ def get_dvf_stats(store: DataStore) -> dict:
     return stats
 
 
-def get_dvf_years(store: DataStore) -> dict:
-    """Return available years and the min/max range for UI year-filter controls."""
-    df = store.dvf_scores
-    if df.empty or "annee" not in df.columns:
-        return {"years": [], "min": None, "max": None}
-
-    years = sorted(df["annee"].dropna().astype(int).unique().tolist())
-    return {
-        "years": years,
-        "min": years[0] if years else None,
-        "max": years[-1] if years else None,
-    }
-
-
-def get_dvf_by_iris(store: DataStore, code_iris: str) -> dict:
-    """
-    Return DVF housing transaction statistics for a single IRIS zone.
-    """
-    df = store.dvf_scores
-
-    if df.empty or "code_iris" not in df.columns:
-        return {"code_iris": code_iris, "total_transactions": 0, "median_prix_m2": 0, "median_surface_m2": 0}
-
-    zone = df[df["code_iris"] == code_iris.zfill(9)]
-
-    if zone.empty:
-        return {"code_iris": code_iris, "total_transactions": 0, "median_prix_m2": 0, "median_surface_m2": 0}
-
-    result: dict = {
-        "code_iris": code_iris,
-        "total_transactions": len(zone),
-        "median_prix_m2": float(zone["prix_m2"].median()) if "prix_m2" in zone.columns else 0,
-        "median_surface_m2": float(zone["surface_m2"].median()) if "surface_m2" in zone.columns else 0,
-        "total_value": float(zone["valeur_fonciere"].sum()) if "valeur_fonciere" in zone.columns else 0,
-    }
-
-    if "prix_m2" in zone.columns:
-        result["price_range"] = {
-            "min": float(zone["prix_m2"].min()),
-            "max": float(zone["prix_m2"].max()),
-        }
-
-    if "annee" in zone.columns:
-        result["by_year"] = {
-            int(yr): int(cnt)
-            for yr, cnt in zone["annee"].value_counts().sort_index().items()
-            if pd.notna(yr)
-        }
-
-    if "type_local" in zone.columns:
-        result["by_type"] = {
-            str(t): int(c)
-            for t, c in zone["type_local"].value_counts().items()
-            if pd.notna(t)
-        }
-
-    return result
-
-
 def get_dvf_by_year(store: DataStore) -> dict:
     """
     Get DVF transactions grouped by year for trend analysis.

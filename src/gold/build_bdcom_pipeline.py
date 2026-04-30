@@ -1,5 +1,4 @@
 from pathlib import Path
-import json
 import pandas as pd
 import numpy as np
 import logging
@@ -7,7 +6,6 @@ import geopandas as gpd
 from shapely.geometry import Point
 
 from src.config import BDCOM_SILVER, GOLD, IRIS_GEOJSON
-from src.db import engine
 
 logger = logging.getLogger(__name__)
 
@@ -148,16 +146,8 @@ def process_bdcom_gold() -> pd.DataFrame:
     if 'surf' in df.columns and 'TYPE' in df.columns:
         logger.info(f"Surface stats by type:\n{df.groupby('TYPE')['surf'].describe().round(2)}")
 
-    # Export to gold CSV
+    # Export to gold
     export_to_gold(df, name='bdcom')
-
-    # Export to MySQL
-    df_sql = df.copy()
-    for col in df_sql.columns:
-        if df_sql[col].apply(lambda x: isinstance(x, (dict, list))).any():
-            df_sql[col] = df_sql[col].apply(lambda x: json.dumps(x) if isinstance(x, (dict, list)) else x)
-    df_sql.to_sql("bdcom", engine, if_exists="replace", index=False)
-    logger.info("Inserted %d rows into MySQL table 'bdcom'", len(df_sql))
 
     return df
 

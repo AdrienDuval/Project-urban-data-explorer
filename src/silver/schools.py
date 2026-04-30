@@ -70,8 +70,8 @@ def process_schools(school_types: Optional[List[str]] = SCHOOL_TYPES) -> pd.Data
     if school_types is not None:
         before = len(schools)
         schools = schools[schools["type"].isin(school_types)]
-        # print(f"[schools] type filter kept {len(schools)}/{before} rows "
-        #       f"({', '.join(school_types)})")
+        print(f"[schools] type filter kept {len(schools)}/{before} rows "
+              f"({', '.join(school_types)})")
 
     # ── Deduplicate: keep most recent year per school ────────────────────────
     schools = schools.sort_values("annee_scolaire", ascending=False)
@@ -85,6 +85,6 @@ def process_schools(school_types: Optional[List[str]] = SCHOOL_TYPES) -> pd.Data
     schools = schools.dropna(subset=["lat", "lng"])
 
     schools.to_csv(SCHOOLS_SILVER, index=False)
-    # print(f"[schools] {len(schools)} schools saved → {SCHOOLS_SILVER.name}")
-    # print(f"  Breakdown: {schools['type'].value_counts().to_dict()}")
+    print(f"[schools] {len(schools)} schools saved → {SCHOOLS_SILVER.name}")
+    print(f"  Breakdown: {schools['type'].value_counts().to_dict()}")
     return schools

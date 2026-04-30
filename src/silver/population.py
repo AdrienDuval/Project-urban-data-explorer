@@ -21,7 +21,7 @@ def process_population() -> pd.DataFrame:
     Returns:
         DataFrame with columns: IRIS, LAB_IRIS, population
     """
-    df = pd.read_csv(POPULATION_RAW, sep=";", dtype={"IRIS": str, "COM": str})
+    df = pd.read_csv(POPULATION_RAW, sep=";", dtype={"IRIS": str, "COM": str, "LAB_IRIS": str})
 
     paris = df[df["COM"].str.startswith("75")].copy()
     paris = paris[paris["TYP_IRIS"] == "H"]
@@ -31,5 +31,5 @@ def process_population() -> pd.DataFrame:
     paris = paris[paris["population"] > MIN_POPULATION]
 
     paris.to_csv(POPULATION_SILVER, index=False)
-    # print(f"[population] {len(paris)} IRIS zones saved → {POPULATION_SILVER.name}")
+    print(f"[population] {len(paris)} IRIS zones saved → {POPULATION_SILVER.name}")
     return paris

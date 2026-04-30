@@ -95,6 +95,6 @@ def compute_school_density() -> pd.DataFrame:
     SCHOOL_DENSITY_GOLD.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(SCHOOL_DENSITY_GOLD, index=False)
     result.to_sql("school_density", engine, if_exists="replace", index=False)
-    # print(f"[school_density] {len(result)} IRIS zones saved → {SCHOOL_DENSITY_GOLD.name} + DB")
-    # print(f"  Avg schools per 1000 residents: {result['schools_per_1000'].mean():.2f}")
+    print(f"[school_density] {len(result)} IRIS zones saved → {SCHOOL_DENSITY_GOLD.name} + DB")
+    print(f"  Avg schools per 1000 residents: {result['schools_per_1000'].mean():.2f}")
     return result
