@@ -15,7 +15,8 @@ BRONZE_SUBFOLDERS = [
     ("transport_data",              "https://drive.google.com/drive/folders/1V7ZdJ6qNzilavQW3XUmA0q66rqW9UYTk"),
     ("indice_confort_thermique",    "https://drive.google.com/drive/folders/1E3yOCO4fL3r3JFRBvcOihwXc0k3NnSzt"),
     ("sale_price_data",             "https://drive.google.com/drive/folders/1vAFfqW9262i6Jj5X9GxIBNkRg3kRLk6a"),
-    ("rent_data",                   "https://drive.google.com/drive/folders/1OipyPvX6jBDSevbrrdykSKPJDe58xFlt")
+    ("rent_data",                   "https://drive.google.com/drive/folders/1OipyPvX6jBDSevbrrdykSKPJDe58xFlt"),
+    ("demographics",                "https://drive.google.com/drive/folders/1SuMkne_Pmokv6zSiHZv3-6FDllNLiGcV")
 ]
 
 MAX_RETRIES = 3
