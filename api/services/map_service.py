@@ -133,6 +133,9 @@ def build_vivabilite_geojson(store: DataStore) -> dict[str, Any]:
                 "quarter_code": None,
                 "geography": "iris",
                 "no_data": True,
+                # typ_iris lets the frontend show WHY the zone has no data:
+                # "A" = activity/institutional, "D" = park/water/special, "H" = residential (pipeline gap)
+                "typ_iris": properties.get("typ_iris"),
             }
         else:
             map_properties = {

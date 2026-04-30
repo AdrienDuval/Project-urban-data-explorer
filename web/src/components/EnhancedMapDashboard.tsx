@@ -359,7 +359,7 @@ const fillLayer: LayerProps = {
     "fill-color": [
       "case",
       ["!=", ["typeof", ["get", "active_score"]], "number"],
-      "#94a3b8",
+      "#cbd5e1", // light slate-gray for excluded zones (A/D/H-gap)
       [
         "interpolate",
         ["linear"],
@@ -378,7 +378,13 @@ const fillLayer: LayerProps = {
         "#047857",
       ],
     ],
-    "fill-opacity": ["interpolate", ["linear"], ["zoom"], 9, 0.58, 13, 0.78],
+    // Excluded zones get a flat low opacity; scored zones scale with zoom
+    "fill-opacity": [
+      "case",
+      ["!=", ["typeof", ["get", "active_score"]], "number"],
+      0.3,
+      ["interpolate", ["linear"], ["zoom"], 9, 0.58, 13, 0.78],
+    ],
     "fill-outline-color": "rgba(15, 23, 42, 0.18)",
   },
 };
@@ -1437,14 +1443,44 @@ function DetailsPanel({
             <span className="font-semibold text-slate-950">
               {feature.loyer_median_m2.toFixed(1)} €/m²
             </span>
+      {feature?.no_data ? (
+        /* ── No-data zone: show reason instead of blank metrics ── */
+        <>
+          <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-[10px] font-semibold text-slate-700">
+              {feature.typ_iris === "A"
+                ? "Activity zone — not scored"
+                : feature.typ_iris === "D"
+                ? "Special-use zone — not scored"
+                : "Residential zone — pipeline data gap"}
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+              {feature.typ_iris === "A"
+                ? "This IRIS zone is classified by INSEE as an activity area (hospital campus, large offices, shopping centre, etc.). It has no permanent residential population, so liveability scoring does not apply."
+                : feature.typ_iris === "D"
+                ? "This zone covers a park, river, cemetery, military area, or other non-residential land. INSEE does not publish household statistics for it."
+                : "This residential zone (TYP_IRIS = H) is present in the INSEE census but is missing from the pipeline output — likely due to a stale silver file. Re-run `python run_pipeline.py` to fix it."}
+            </p>
           </div>
-        ) : null}
-        {typeof feature?.prix_m2 === "number" ? (
-          <div className="mt-1.5 flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">Median sale price</span>
-            <span className="font-semibold text-slate-950">
-              {formatNumber(feature.prix_m2)} €/m²
-            </span>
+
+          {/* Still show IRIS code so it can be identified */}
+          <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500">IRIS code</span>
+              <span className="font-mono text-[10px] font-semibold text-slate-950">
+                {feature.code_iris ?? "N/A"}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between text-[11px]">
+              <span className="text-slate-500">Zone type</span>
+              <span className="font-semibold text-slate-950">
+                {feature.typ_iris === "A"
+                  ? "A — Activité"
+                  : feature.typ_iris === "D"
+                  ? "D — Divers"
+                  : "H — Habitat"}
+              </span>
+            </div>
           </div>
         ) : null}
         {mainIndicator === "thermal" ? (
@@ -1526,25 +1562,119 @@ function DetailsPanel({
             <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
               {bestPillar.shortLabel} · {formatScore(bestPillar.value)}
             </p>
+        </>
+      ) : (
+        /* ── Scored zone: full metrics ── */
+        <>
+          <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+            <Metric
+              label={metricLabel}
+              tone="green"
+              value={formatScore(feature?.active_score ?? averageScore)}
+            />
+            <Metric
+              label="Dynamic rank"
+              tone="dark"
+              value={feature?.active_rank ? `#${feature.active_rank}` : "N/A"}
+            />
           </div>
-          <div className="rounded-lg bg-rose-50 p-2">
-            <p className="text-[9px] font-medium text-rose-700">Weakest pillar</p>
-            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
-              {weakestPillar.shortLabel} · {formatScore(weakestPillar.value)}
-            </p>
-          </div>
-        </div>
-      ) : null}
 
-      {feature && isVivabilite ? (
-        <div className="mt-2.5">
-          <ScoreBreakdown
-            feature={feature}
-            showWeightContributions={selectedMetric === "family_mix"}
-            weights={weights}
-          />
-        </div>
-      ) : null}
+          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+            <Metric
+              label={isVivabilite ? "Original" : "Avg"}
+              value={formatScore(isVivabilite ? feature?.vivabilite_score : averageScore)}
+            />
+            <Metric
+              label="Delta"
+              value={
+                typeof feature?.score_delta === "number"
+                  ? `${feature.score_delta >= 0 ? "+" : ""}${feature.score_delta.toFixed(1)}`
+                  : "N/A"
+              }
+            />
+            <Metric
+              label="Percentile"
+              value={
+                typeof feature?.active_percentile === "number"
+                  ? `${feature.active_percentile}%`
+                  : "N/A"
+              }
+            />
+          </div>
+
+          <div className="mt-2 rounded-xl border border-slate-900/8 bg-white/55 p-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500">
+                {feature?.geography === "arrondissement" ? "Level" : "Population"}
+              </span>
+              <span className="font-semibold text-slate-950">
+                {feature?.geography === "arrondissement"
+                  ? "Arrondissement"
+                  : formatNumber(feature?.population)}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between text-[11px]">
+              <span className="text-slate-500">
+                {feature?.geography === "arrondissement" ? "Arrondissement code" : "IRIS code"}
+              </span>
+              <span className="font-mono text-[10px] font-semibold text-slate-950">
+                {feature?.code_iris ?? feature?.code_arrondissement ?? "N/A"}
+              </span>
+            </div>
+            {typeof feature?.loyer_median_m2 === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Median rent</span>
+                <span className="font-semibold text-slate-950">
+                  {feature.loyer_median_m2.toFixed(1)} €/m²
+                </span>
+              </div>
+            ) : null}
+            {typeof feature?.prix_m2 === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Median sale price</span>
+                <span className="font-semibold text-slate-950">
+                  {formatNumber(feature.prix_m2)} €/m²
+                </span>
+              </div>
+            ) : null}
+            {typeof feature?.densite_arbres === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Tree density</span>
+                <span className="font-semibold text-slate-950">
+                  {feature.densite_arbres.toFixed(1)} trees/ha
+                </span>
+              </div>
+            ) : null}
+          </div>
+
+          {bestPillar && weakestPillar ? (
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <div className="rounded-lg bg-blue-50 p-2">
+                <p className="text-[9px] font-medium text-[#007AFF]">Strongest pillar</p>
+                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
+                  {bestPillar.shortLabel} · {formatScore(bestPillar.value)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-rose-50 p-2">
+                <p className="text-[9px] font-medium text-rose-700">Weakest pillar</p>
+                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
+                  {weakestPillar.shortLabel} · {formatScore(weakestPillar.value)}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {feature && isVivabilite ? (
+            <div className="mt-2.5">
+              <ScoreBreakdown
+                feature={feature}
+                showWeightContributions={selectedMetric === "family_mix"}
+                weights={weights}
+              />
+            </div>
+          ) : null}
+        </>
+      )}
     </GlassCard>
   );
 }
@@ -2044,27 +2174,46 @@ export function EnhancedMapDashboard() {
                 setPopup(null);
               }}
             >
-              <div className="max-w-[200px] p-1.5">
+              <div className="max-w-[220px] p-1.5">
                 <p className="text-[8px] font-semibold uppercase tracking-wide text-[#007AFF]">
                   {selected ? "Selected" : "Preview"}
                 </p>
                 <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-950">
                   {popupFeature.name}
                 </p>
-                <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
-                  <div className="rounded-md bg-blue-50 px-1.5 py-1">
-                    <p className="text-[8px] font-medium text-[#007AFF]">Score</p>
-                    <p className="font-semibold tabular-nums text-slate-950">
-                      {formatScore(popupFeature.active_score)}
+                {popupFeature.no_data ? (
+                  <div className="mt-1 rounded-md bg-slate-100 px-2 py-1.5">
+                    <p className="text-[9px] font-semibold text-slate-600">
+                      {popupFeature.typ_iris === "A"
+                        ? "⚙ Activity zone"
+                        : popupFeature.typ_iris === "D"
+                        ? "🌿 Special-use zone"
+                        : "⚠ Residential — data gap"}
+                    </p>
+                    <p className="mt-0.5 text-[8px] leading-snug text-slate-400">
+                      {popupFeature.typ_iris === "A"
+                        ? "Institutional or commercial area — no residential population scored."
+                        : popupFeature.typ_iris === "D"
+                        ? "Park, water body, or public space — no household data."
+                        : "Residential zone missing from pipeline output. Re-run `python run_pipeline.py`."}
                     </p>
                   </div>
-                  <div className="rounded-md bg-slate-100 px-1.5 py-1">
-                    <p className="text-[8px] font-medium text-slate-500">Rank</p>
-                    <p className="font-semibold tabular-nums text-slate-950">
-                      #{popupFeature.active_rank}
-                    </p>
+                ) : (
+                  <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
+                    <div className="rounded-md bg-blue-50 px-1.5 py-1">
+                      <p className="text-[8px] font-medium text-[#007AFF]">Score</p>
+                      <p className="font-semibold tabular-nums text-slate-950">
+                        {formatScore(popupFeature.active_score)}
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-slate-100 px-1.5 py-1">
+                      <p className="text-[8px] font-medium text-slate-500">Rank</p>
+                      <p className="font-semibold tabular-nums text-slate-950">
+                        #{popupFeature.active_rank}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
                 <p className="mt-1 line-clamp-1 text-[9px] text-slate-500">
                   {popupFeature.arrondissement} ·{" "}
                   {popupFeature.code_iris ?? popupFeature.code_arrondissement}
