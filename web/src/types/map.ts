@@ -76,6 +76,25 @@ export type IndicatorMapFeatureCollection = FeatureCollection<
   IndicatorMapProperties
 >;
 
+export type BdcomIrisStats = {
+  code_iris: string;
+  total_establishments: number;
+  avg_surface_m2: number;
+  top_activities: Array<{ activity: string; count: number }>;
+  by_type?: Record<string, number>;
+};
+
+export type DvfIrisStats = {
+  code_iris: string;
+  total_transactions: number;
+  median_prix_m2: number;
+  median_surface_m2: number;
+  total_value: number;
+  price_range?: { min: number; max: number };
+  by_year?: Record<string, number>;
+  by_type?: Record<string, number>;
+};
+
 export type TransportType = "bus" | "metro" | "rail" | "tram" | "velib";
 
 export type TransportPoint = {

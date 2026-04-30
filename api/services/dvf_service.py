@@ -87,6 +87,38 @@ def get_dvf_stats(store: DataStore) -> dict:
     return stats
 
 
+def get_dvf_by_iris(store: DataStore, code_iris: str) -> dict:
+    """Return DVF transaction statistics for a specific IRIS zone."""
+    df = store.dvf_scores
+
+    if df.empty or "code_iris" not in df.columns:
+        return {"code_iris": code_iris, "total_transactions": 0, "median_prix_m2": 0, "median_surface_m2": 0, "total_value": 0}
+
+    zone = df[df["code_iris"].astype(str).str.zfill(9) == code_iris.zfill(9)]
+
+    if zone.empty:
+        return {"code_iris": code_iris, "total_transactions": 0, "median_prix_m2": 0, "median_surface_m2": 0, "total_value": 0}
+
+    result: dict = {
+        "code_iris": code_iris,
+        "total_transactions": len(zone),
+        "median_prix_m2": float(zone["prix_m2"].median()) if "prix_m2" in zone.columns else 0,
+        "median_surface_m2": float(zone["surface_m2"].median()) if "surface_m2" in zone.columns else 0,
+        "total_value": float(zone["valeur_fonciere"].sum()) if "valeur_fonciere" in zone.columns else 0,
+    }
+
+    if "prix_m2" in zone.columns:
+        result["price_range"] = {"min": float(zone["prix_m2"].min()), "max": float(zone["prix_m2"].max())}
+
+    if "annee" in zone.columns:
+        result["by_year"] = {str(int(k)): int(v) for k, v in zone["annee"].value_counts().sort_index().items() if pd.notna(k)}
+
+    if "type_local" in zone.columns:
+        result["by_type"] = {str(k): int(v) for k, v in zone["type_local"].value_counts().items()}
+
+    return result
+
+
 def get_dvf_by_year(store: DataStore) -> dict:
     """
     Get DVF transactions grouped by year for trend analysis.

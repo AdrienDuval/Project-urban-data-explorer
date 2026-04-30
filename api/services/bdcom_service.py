@@ -62,6 +62,36 @@ def get_bdcom_stats(store: DataStore) -> dict:
     return stats
 
 
+def get_bdcom_by_iris(store: DataStore, code_iris: str) -> dict:
+    """Return BDCOM statistics for a specific IRIS zone."""
+    df = store.bdcom_scores
+
+    if df.empty or "code_iris" not in df.columns:
+        return {"code_iris": code_iris, "total_establishments": 0, "avg_surface_m2": 0, "top_activities": []}
+
+    zone = df[df["code_iris"].astype(str).str.zfill(9) == code_iris.zfill(9)]
+
+    if zone.empty:
+        return {"code_iris": code_iris, "total_establishments": 0, "avg_surface_m2": 0, "top_activities": []}
+
+    result: dict = {
+        "code_iris": code_iris,
+        "total_establishments": len(zone),
+        "avg_surface_m2": float(zone["surf"].mean()) if "surf" in zone.columns else 0,
+    }
+
+    if "Libellé activité (224 postes)" in zone.columns:
+        top = zone["Libellé activité (224 postes)"].value_counts().head(5)
+        result["top_activities"] = [{"activity": k, "count": int(v)} for k, v in top.items()]
+    else:
+        result["top_activities"] = []
+
+    if "TYPE" in zone.columns:
+        result["by_type"] = {str(k): int(v) for k, v in zone["TYPE"].value_counts().items()}
+
+    return result
+
+
 def get_bdcom_by_type(store: DataStore) -> dict:
     """
     Get BDCOM establishments grouped by TYPE (commerce type classification).
