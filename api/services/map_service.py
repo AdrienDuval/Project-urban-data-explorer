@@ -146,10 +146,10 @@ def build_vivabilite_geojson(store: DataStore) -> dict[str, Any]:
                 "geography": "iris",
                 "no_data": False,
             }
-            for key, value in score.items():
-                if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
-                    continue
-                map_properties[key] = _clean_value(value)
+        for key, value in score.items():
+            if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
+                continue
+            map_properties[key] = _clean_value(value)
 
         joined_features.append(
             {
@@ -255,6 +255,9 @@ def build_thermal_comfort_geojson(store: DataStore) -> dict[str, Any]:
             "before requesting this map layer."
         )
 
+    gdf["thermal_score"] = (pd.to_numeric(gdf["indice_confort_thermique"], errors="coerce") / 10).round(2)
+    gdf["tree_density_score"] = _normalise_0_10(gdf["densite_arbres"])
+    gdf["cooling_area_score"] = _normalise_0_10(gdf["ratio_fraicheur"])
     # ✅ Utilise directement les scores calculés par le pipeline (0-10)
     gdf["map_id"] = gdf["code_iris"].astype(str).str.zfill(9)
     gdf["code_iris"] = gdf["map_id"]
@@ -279,11 +282,13 @@ def build_thermal_comfort_geojson(store: DataStore) -> dict[str, Any]:
     keep_cols = [
         "map_id", "geography", "code_iris", "name", "arrondissement",
         "thermal_score", "tree_density_score", "cooling_area_score",
-        "proximity_score", "densite_arbres", "ratio_fraicheur", "geometry",
+        "proximity_score", "indice_confort_thermique",
+        "densite_arbres", "ratio_fraicheur", "geometry",
     ]
     # Garde seulement les colonnes qui existent
     keep_cols = [c for c in keep_cols if c in gdf.columns]
     return _geojson_from_gdf(gdf[keep_cols], required_score="thermal_score")
+
 
 def build_rent_geojson(store: DataStore) -> dict[str, Any]:
     """Return arrondissement polygons with median rent and affordability scores."""

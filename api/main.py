@@ -29,6 +29,7 @@ from api.routers import (
     stats,
     zone_analytics,
 )
+from api.routers import iris, map as map_router, population, schools, stats, bdcom, dvf
 from api.routers.indicators import schools as indicator_schools
 from api.routers.indicators import vivabilite as indicator_vivabilite
 from api.routers.indicators import transport as indicator_transport
@@ -106,8 +107,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(
-        thermal_comfort.router, 
-        prefix="/indicators/thermal-comfort", 
+        thermal_comfort.router,
+        prefix="/indicators/thermal-comfort",
         tags=["Thermal Comfort"])
 
 

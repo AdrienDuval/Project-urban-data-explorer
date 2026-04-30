@@ -87,7 +87,7 @@ def get_sale_map(store: DataStoreDep) -> dict[str, Any]:
         return map_service.build_sale_geojson(store)
     except map_service.MapDataUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    
+
 
 @router.get(
     "/demographics",

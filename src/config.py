@@ -48,6 +48,8 @@ QUARTIERS_KML           = BRONZE / "rent_data" / "L7501_zone_elem_2024.kml"
 MAPPING_ZONES_XLSX      = BRONZE / "rent_data" / "table_zones_2024_L7501_1.xls"
 RENT_DATA_CSV           = BRONZE / "rent_data" / "Base_OP_2024_L7501.csv"
 
+# Share of population by SPC (Socio-professional category) in each IRIS
+POP_DATA_SPC_RAW        = BRONZE / "pop_spc" / "base-ic-evol-struct-pop-2022.csv"
 # demographics and socio-economics data
 DEMO_REVENUE_BRONZE     = BRONZE / "demographics" / "BASE_TD_FILO_IRIS_2021_DEC.csv"
 DEMO_CSP_BRONZE         = BRONZE / "demographics" / "base-ic-evol-struct-pop-2022.CSV"
@@ -83,9 +85,9 @@ TRANSPORT_VELIB_SILVER  = SILVER / "velib_paris.csv"
 
 BDCOM_GOLD      = GOLD / "bdcom.csv"
 DVF_GOLD        = GOLD / "dvf.csv"
-THERMAL_COMFORT_GOLD = GOLD / "urban_comfort_index.csv"
-SALE_PRICE_GOLD = GOLD / "sale_price_median.csv"
-RENT_PRICE_GOLD = GOLD / "rent_data_par_arrdt.csv"
+THERMAL_COMFORT_GOLD = GOLD / "urban_comfort_index.parquet"
+SALE_PRICE_GOLD = GOLD / "sale_price_median.parquet"
+RENT_PRICE_GOLD = GOLD / "rent_data_par_arrdt.parquet"
 
 SCHOOL_DENSITY_GOLD      = GOLD / "schools_score_iris.csv"
 # Geopandas buffer-based 0–10 score (input to vivabilité familiale)
@@ -133,10 +135,24 @@ TRANSPORT_WEIGHTS = {
 
 # ── Vivabilité familiale composite weights ────────────────────────────────────
 # Only pillars with real per-IRIS data. Equal weight (0.20 each).
+# Non-price family suitability score. Childcare, safety, and environment use a
+# flat neutral sub-score (5.0) until per-IRIS data is available.
 VIVABILITE_WEIGHTS = {
     "school_score":         0.20,
-    "healthcare_score":     0.20,
-    "transport_score":      0.20,
-    "daily_services_score": 0.20,
-    "green_spaces_score":   0.20,
+    "childcare_score":      0.15,
+    "safety_score":         0.20,
+    "healthcare_score":     0.15,
+    "environment_score":    0.15,
+    "green_spaces_score":   0.075,
+    "transport_score":      0.05,
+    "daily_services_score": 0.025,
+}
+
+# ── Essential connectivity & services composite weights ───────────────────────
+# These inputs are already normalised on the same 0–10 scale in Gold, so the
+# composite is a direct weighted sum without an additional normalisation pass.
+ESSENTIAL_CONNECTIVITY_WEIGHTS = {
+    "transport_score":      1 / 3,
+    "healthcare_score":     1 / 3,
+    "daily_services_score": 1 / 3,
 }

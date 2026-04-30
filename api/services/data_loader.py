@@ -207,6 +207,8 @@ class DataStore:
 
         if DVF_GOLD.exists():
             logger.info("Loading gold: %s", DVF_GOLD.name)
+            dvf_scores = pd.read_csv(DVF_GOLD, dtype={"code_iris": str})
+            dvf_scores["code_iris"] = dvf_scores["code_iris"].str.zfill(9)
             dvf_scores = pd.read_csv(DVF_GOLD)
             if "code_iris" in dvf_scores.columns:
                 dvf_scores["code_iris"] = dvf_scores["code_iris"].astype(str).str.zfill(9)

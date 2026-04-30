@@ -42,7 +42,7 @@ def _download_subfolder(name, url, max_retries=MAX_RETRIES):
     for attempt in range(1, max_retries + 1):
         try:
             logging.info("Downloading '%s' (attempt %d)...", name, attempt)
-            gdown.download_folder(url, output=str(target), quiet=False)
+            gdown.download_folder(url, output=str(target), quiet=False, remaining_ok=True)
             logging.info("'%s' downloaded successfully.", name)
             return True
         except Exception as e:

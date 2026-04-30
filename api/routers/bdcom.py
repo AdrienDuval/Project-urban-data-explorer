@@ -5,7 +5,7 @@ All routes live under the ``/bdcom`` prefix (registered in ``main.py``).
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Path
 
 from api.dependencies import DataStoreDep
 from api.services import bdcom_service
@@ -23,6 +23,18 @@ router = APIRouter()
 )
 def get_bdcom_stats(store: DataStoreDep):
     return bdcom_service.get_bdcom_stats(store)
+
+
+@router.get(
+    "/by-iris/{code_iris}",
+    summary="BDCOM establishments for an IRIS zone",
+    description="Return commercial establishment statistics for a single 9-digit IRIS zone code.",
+)
+def get_bdcom_by_iris(
+    store: DataStoreDep,
+    code_iris: str = Path(..., description="9-digit IRIS code"),
+):
+    return bdcom_service.get_bdcom_by_iris(store, code_iris)
 
 
 @router.get(
