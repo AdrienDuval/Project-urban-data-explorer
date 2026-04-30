@@ -176,3 +176,16 @@ export async function fetchTransportPoints(): Promise<TransportPoint[]> {
 
   return response.json() as Promise<TransportPoint[]>;
 }
+
+
+export async function fetchDemographicsMap(): Promise<IndicatorMapFeatureCollection> {
+  const response = await fetch(`${API_URL}/map/demographics`, { 
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+  
+  return response.json() as Promise<IndicatorMapFeatureCollection>;
+}

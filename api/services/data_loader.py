@@ -19,6 +19,7 @@ import pandas as pd
 from src.config import (
     ARRONDISSEMENTS,
     BDCOM_GOLD,
+    DEMO_GOLD,
     DVF_GOLD,
     IRIS_GEOJSON,
     POPULATION_SILVER,
@@ -67,6 +68,8 @@ class DataStore:
     dvf_scores: pd.DataFrame
     iris_geojson: dict[str, Any]
     arrondissements_geojson: dict[str, Any]
+    demographics_scores: pd.DataFrame
+
 
     # ------------------------------------------------------------------
     # Factory
@@ -204,12 +207,22 @@ class DataStore:
 
         if DVF_GOLD.exists():
             logger.info("Loading gold: %s", DVF_GOLD.name)
-            dvf_scores = pd.read_csv(DVF_GOLD, dtype={"code_iris": str})
-            dvf_scores["code_iris"] = dvf_scores["code_iris"].str.zfill(9)
+            dvf_scores = pd.read_csv(DVF_GOLD)
             logger.info("  → %d IRIS zones loaded", len(dvf_scores))
         else:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", DVF_GOLD)
             dvf_scores = pd.DataFrame()
+
+        # Dans la méthode load(), ajouter :
+        if DEMO_GOLD.exists():
+            logger.info("Loading gold: %s", DEMO_GOLD.name)
+            demographics_scores = pd.read_csv(DEMO_GOLD, dtype={"code_iris": str})
+            demographics_scores["code_iris"] = demographics_scores["code_iris"].str.zfill(9)
+            logger.info("  → %d demographics zones loaded", len(demographics_scores))
+        else:
+            logger.warning("Gold file not found: %s", DEMO_GOLD)
+            demographics_scores = pd.DataFrame()
+
 
         return cls(
             iris_scores=_clean_df(iris_scores),
@@ -225,4 +238,5 @@ class DataStore:
             dvf_scores=_clean_df(dvf_scores),
             iris_geojson=iris_geojson,
             arrondissements_geojson=arrondissements_geojson,
+            demographics_scores=_clean_df(demographics_scores),
         )

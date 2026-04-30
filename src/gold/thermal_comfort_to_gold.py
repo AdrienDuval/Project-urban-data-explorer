@@ -14,11 +14,12 @@ def process_thermal_comfort_gold():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # ── 1. Indicateurs bruts ──────────────────────────────────────────────
+    # De,sité d'arbres et ratio de surface d'îlot de fraîcheur par 
+    # rapport à la surface totale de l'IRIS
     df["densite_arbres"] = df["nb_arbres"] / (df["surface_iris"] / 10000)
     df["ratio_fraicheur"] = df["total_area_ilot"] / df["surface_iris"]
 
-    # ── 2. Normalisation robuste (percentile) sur 0-10 ───────────────────
+    # Normalisation robuste (percentile) sur 0-10
     # Min-Max classique est écrasé par les outliers (max=129 arbres/ha).
     # On cappe à P95 pour que 95% des zones soient bien réparties sur [0,10].
     def robust_score(series, cap_percentile=95):
@@ -34,7 +35,7 @@ def process_thermal_comfort_gold():
     df["ratio_fraicheur_sqrt"] = np.sqrt(df["ratio_fraicheur"])
     df["cooling_area_score"] = robust_score(df["ratio_fraicheur_sqrt"], cap_percentile=95)
 
-    # ── 3. Score de proximité aux îlots de fraîcheur ─────────────────────
+    # Score de proximité aux îlots de fraîcheur
     # Pour les 527 zones sans îlot, on leur attribue un bonus
     # basé sur la moyenne pondérée (1/distance²) des zones voisines.
     # On travaille en Lambert 93 (mètres) pour les distances.
@@ -65,7 +66,7 @@ def process_thermal_comfort_gold():
         gpd.pd.Series(proximity_scores), cap_percentile=95
     )
 
-    # ── 4. Score final ────────────────────────────────────────────────────
+    # Score final
     # 35% arbres directs + 30% îlots directs + 35% proximité voisinage
     df["thermal_score"] = (
         df["tree_density_score"] * 0.35
@@ -75,7 +76,7 @@ def process_thermal_comfort_gold():
 
     df["indice_confort_thermique"] = df["thermal_score"]
 
-    # ── 5. Arrondissement ─────────────────────────────────────────────────
+    # Arrondissement
     def code_to_arrondissement(code_iris):
         try:
             num = int(str(code_iris)[3:5])
@@ -86,7 +87,7 @@ def process_thermal_comfort_gold():
 
     df["arrondissement"] = df["code_iris"].apply(code_to_arrondissement)
 
-    # ── 6. Export ─────────────────────────────────────────────────────────
+    # Export
     cols_to_keep = [
         "code_iris", "nom_iris", "arrondissement",
         "densite_arbres", "ratio_fraicheur",
@@ -103,14 +104,14 @@ def process_thermal_comfort_gold():
         gdf_final = gdf_final.to_crs(epsg=4326)
         print("[thermal_comfort] Reprojected to WGS84.")
 
-    gdf_final.to_parquet(THERMAL_COMFORT_GOLD, engine="pyarrow")
-    print("🏆 Gold : urban_comfort_index.parquet prêt.")
+    gdf_final.to_csv(THERMAL_COMFORT_GOLD, index=False)
+    print("Gold : urban_comfort_index.csv prêt.")
 
     # Export MySQL
     df_sql = gdf_final.copy()
     df_sql["geometry"] = df_sql["geometry"].apply(lambda g: g.wkt if g else None)
     df_sql.to_sql("thermal_comfort", engine, if_exists="replace", index=False)
-    print("💾 Données insérées dans MySQL 'thermal_comfort'.")
+    print("Données insérées dans MySQL 'thermal_comfort'.")
 
 
 if __name__ == "__main__":

@@ -68,11 +68,11 @@ def process_rent_data_to_gold():
     output_dir = os.path.dirname(RENT_PRICE_GOLD)
     os.makedirs(output_dir, exist_ok=True)
 
-    gdf_final.to_parquet(RENT_PRICE_GOLD, engine="pyarrow")
+    gdf_final.to_csv(RENT_PRICE_GOLD, index=False)
 
-    print("Gold : rent_data.parquet prêt pour le Dashboard.")
+    print("Gold : rent_data.csv prêt pour le Dashboard.")
     
-    # 6. Insertion en base de données MySQL
+    # Insertion en base de données MySQL
     # Convertir la géométrie en WKT (Well-Known Text) pour MySQL
     df_sql = gdf_final.copy()
     df_sql['geometry'] = df_sql['geometry'].apply(lambda geom: geom.wkt if geom else None)

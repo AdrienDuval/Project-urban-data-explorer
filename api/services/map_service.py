@@ -347,3 +347,66 @@ def build_sale_geojson(store: DataStore) -> dict[str, Any]:
         "geometry",
     ]
     return _geojson_from_gdf(gdf[keep_cols], required_score="sale_score")
+
+
+def build_demographics_geojson(store: DataStore) -> dict[str, Any]:
+    """Return IRIS polygons with demographic and socio-economic scores."""
+    features_base = store.iris_geojson.get("features", [])
+    if not features_base:
+        raise MapDataUnavailableError("IRIS geometry not loaded.")
+
+    df = store.demographics_scores
+    if df.empty:
+        raise MapDataUnavailableError(
+            "Demographics scores not loaded. Run `python run_pipeline.py --gold`."
+        )
+
+    scores_by_iris = df.set_index("code_iris").to_dict(orient="index")
+    joined: list[dict[str, Any]] = []
+
+    for feature in features_base:
+        props = feature.get("properties") or {}
+        code_iris = str(props.get("code_iris") or "").zfill(9)
+        score = scores_by_iris.get(code_iris)
+        if score is None:
+            continue
+
+        joined.append({
+            "type": "Feature",
+            "geometry": deepcopy(feature.get("geometry")),
+            "properties": {
+                "map_id": code_iris,
+                "code_iris": code_iris,
+                "name": _clean_value(score.get("nom_iris")) or props.get("nom_iris"),
+                "arrondissement": _clean_value(score.get("arrondissement"))
+                    or _arrondissement_label(code_iris[3:5]),
+                "geography": "iris",
+                # Population
+                "population": _clean_value(score.get("population")),
+                "pop_0_14": _clean_value(score.get("pop_0_14")),
+                "pop_15_29": _clean_value(score.get("pop_15_29")),
+                "pop_65p": _clean_value(score.get("pop_65p")),
+                "pct_seniors": _clean_value(score.get("pct_seniors")),
+                # Revenus
+                "revenu_median": _clean_value(score.get("revenu_median")),
+                "revenu_q1": _clean_value(score.get("revenu_q1")),
+                "revenu_q3": _clean_value(score.get("revenu_q3")),
+                "gini": _clean_value(score.get("gini")),
+                "taux_pauvrete": _clean_value(score.get("taux_pauvrete")),
+                # CSP (parts %)
+                "pct_cadres": _clean_value(score.get("pct_cadres")),
+                "pct_employes": _clean_value(score.get("pct_employes")),
+                "pct_ouvriers": _clean_value(score.get("pct_ouvriers")),
+                "pct_retraites": _clean_value(score.get("pct_retraites")),
+                "pct_sans_activite": _clean_value(score.get("pct_sans_activite")),
+                # Scores 0-10
+                "score_revenus": _clean_value(score.get("score_revenus")),
+                "score_mixite": _clean_value(score.get("score_mixite")),
+                "demographics_score": _clean_value(score.get("demographics_score")),
+            },
+        })
+
+    if not joined:
+        raise MapDataUnavailableError("No IRIS geometries matched demographics scores.")
+
+    return {"type": "FeatureCollection", "features": joined}

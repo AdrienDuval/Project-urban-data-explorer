@@ -42,12 +42,12 @@ def process_sale_price_median_to_silver():
         value_name="prix_m2"
     )
 
-    # 5. Nettoyage arrondissement (extraire le nombre) et prix (convertir en float)
+    # Nettoyage arrondissement (extraire le nombre) et prix (convertir en float)
     df_long["arrondissement"] = df_long["arrondissement"].str.extract(r"(\d+)").astype(int)
     df_long["prix_m2"] = pd.to_numeric(df_long["prix_m2"], errors='coerce')
 
 
-    # 6. Transformation du Trimestre en Date
+    # Transformation du Trimestre en Date
     # On s'assure de ne garder que les lignes qui contiennent un tiret "-"
     df_long = df_long[df_long["Trimestre"].notnull()].copy()
 
