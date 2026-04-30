@@ -71,7 +71,7 @@ def process_rent_data_to_gold():
     gdf_final.to_csv(RENT_PRICE_GOLD, index=False)
 
     print("Gold : rent_data.csv prêt pour le Dashboard.")
-    
+
     # Insertion en base de données MySQL
     # Convertir la géométrie en WKT (Well-Known Text) pour MySQL
     df_sql = gdf_final.copy()

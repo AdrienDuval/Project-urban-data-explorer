@@ -23,3 +23,16 @@ def get_dvf_stats() -> dict:
 
 def get_dvf_by_year() -> dict:
     return {}
+
+
+def get_dvf_by_iris(code_iris: str) -> dict:
+    return {
+        "code_iris": code_iris,
+        "total_transactions": 0,
+        "median_prix_m2": 0,
+        "median_surface_m2": 0,
+        "total_value": 0,
+        "price_range": {"min": 0, "max": 0},
+        "by_year": {},
+        "by_type": {},
+    }

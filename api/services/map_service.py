@@ -149,10 +149,10 @@ def build_vivabilite_geojson(spatial: SpatialStore) -> dict[str, Any]:
                 "geography": "iris",
                 "no_data": False,
             }
-            for key, value in score.items():
-                if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
-                    continue
-                map_properties[key] = _clean_value(value)
+        for key, value in score.items():
+            if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
+                continue
+            map_properties[key] = _clean_value(value)
 
         joined_features.append({
             "type": "Feature",
@@ -247,7 +247,8 @@ def build_thermal_comfort_geojson(spatial: SpatialStore) -> dict[str, Any]:
     keep_cols = [
         "map_id", "geography", "code_iris", "name", "arrondissement",
         "thermal_score", "tree_density_score", "cooling_area_score",
-        "proximity_score", "densite_arbres", "ratio_fraicheur", "geometry",
+        "proximity_score", "indice_confort_thermique",
+        "densite_arbres", "ratio_fraicheur", "geometry",
     ]
     keep_cols = [c for c in keep_cols if c in gdf.columns]
     return _geojson_from_gdf(gdf[keep_cols], required_score="thermal_score")

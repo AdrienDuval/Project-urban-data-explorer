@@ -1,10 +1,6 @@
 """Legacy data-loading layer — now only used for bdcom/dvf CSV fallback.
 
-All other datasets are served from MySQL via the service functions in
-api/services/*.  Spatial GeoDataFrames are served from api/services/spatial_cache.py.
-
-bdcom and dvf do not yet have MySQL tables; their services return empty data
-until the pipeline populates them.
+All other datasets are served from MySQL via service functions.
 """
 
 from __future__ import annotations
@@ -21,11 +17,7 @@ def _clean_df(df: pd.DataFrame) -> pd.DataFrame:
 
 @dataclass
 class DataStore:
-    """Minimal stub kept for bdcom/dvf routers that still reference DataStoreDep.
-
-    All fields default to empty DataFrames — bdcom and dvf are unavailable
-    until their MySQL tables are created by the pipeline.
-    """
+    """Minimal stub kept for bdcom/dvf services."""
 
     bdcom_scores: pd.DataFrame = field(default_factory=pd.DataFrame)
     dvf_scores: pd.DataFrame = field(default_factory=pd.DataFrame)

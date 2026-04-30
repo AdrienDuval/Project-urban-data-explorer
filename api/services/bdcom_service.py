@@ -6,7 +6,6 @@ until the pipeline populates it.
 
 from __future__ import annotations
 
-
 def get_bdcom_stats() -> dict:
     return {
         "total_establishments": 0,
@@ -19,3 +18,13 @@ def get_bdcom_stats() -> dict:
 
 def get_bdcom_by_type() -> dict:
     return {}
+
+
+def get_bdcom_by_iris(code_iris: str) -> dict:
+    return {
+        "code_iris": code_iris,
+        "total_establishments": 0,
+        "avg_surface_m2": 0,
+        "top_activities": [],
+        "by_type": {},
+    }

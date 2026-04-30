@@ -13,6 +13,8 @@ import Map, {
 } from "react-map-gl/mapbox";
 
 import {
+  fetchBdcomByIris,
+  fetchDvfByIris,
   fetchRentMap,
   fetchSaleMap,
   fetchThermalComfortMap,
@@ -24,6 +26,8 @@ import {
   recordZoneClick,
 } from "@/lib/api";
 import type {
+  BdcomIrisStats,
+  DvfIrisStats,
   IndicatorMapFeatureCollection,
   IndicatorMapProperties,
   TransportPoint,
@@ -35,7 +39,10 @@ import type {
 
 type WeightKey =
   | "school_score"
+  | "childcare_score"
+  | "safety_score"
   | "healthcare_score"
+  | "environment_score"
   | "transport_score"
   | "daily_services_score"
   | "green_spaces_score";
@@ -44,6 +51,7 @@ type MainIndicator = "vivabilite" | "transport" | "thermal" | "housing" | "demog
 
 type MetricKey =
   | "vivabilite_score"
+  | "essential_connectivity_score"
   | "family_mix"
   | WeightKey
   | "thermal_score"
@@ -110,18 +118,24 @@ const ileDeFranceMaxBounds: [[number, number], [number, number]] = [
 
 const defaultWeights: Weights = {
   school_score: 20,
-  healthcare_score: 20,
-  transport_score: 20,
-  daily_services_score: 20,
-  green_spaces_score: 20,
+  childcare_score: 15,
+  safety_score: 20,
+  healthcare_score: 15,
+  environment_score: 15,
+  green_spaces_score: 7.5,
+  transport_score: 5,
+  daily_services_score: 2.5,
 };
 
 const equalWeights: Weights = {
-  school_score: 20,
-  healthcare_score: 20,
-  transport_score: 20,
-  daily_services_score: 20,
-  green_spaces_score: 20,
+  school_score: 12.5,
+  childcare_score: 12.5,
+  safety_score: 12.5,
+  healthcare_score: 12.5,
+  environment_score: 12.5,
+  green_spaces_score: 12.5,
+  transport_score: 12.5,
+  daily_services_score: 12.5,
 };
 
 const pillarMeta: Array<{
@@ -139,6 +153,20 @@ const pillarMeta: Array<{
     color: "#2563eb",
   },
   {
+    key: "childcare_score",
+    label: "Childcare",
+    shortLabel: "Childcare",
+    description: "Crèches and early childhood access (neutral baseline, 5/10 for all zones).",
+    color: "#db2777",
+  },
+  {
+    key: "safety_score",
+    label: "Safety",
+    shortLabel: "Safety",
+    description: "Neighbourhood safety and security (neutral baseline, 5/10 for all zones).",
+    color: "#dc2626",
+  },
+  {
     key: "healthcare_score",
     label: "Healthcare",
     shortLabel: "Health",
@@ -146,10 +174,17 @@ const pillarMeta: Array<{
     color: "#0891b2",
   },
   {
+    key: "environment_score",
+    label: "Environment",
+    shortLabel: "Env.",
+    description: "Air, noise, and heat (neutral baseline, 5/10 for all zones).",
+    color: "#65a30d",
+  },
+  {
     key: "transport_score",
     label: "Transport",
     shortLabel: "Transit",
-    description: "Metro, rail, tram, bus, cableway, and Vélib access.",
+    description: "Metro, rail, tram, bus, cableway, and Velib access.",
     color: "#7c3aed",
   },
   {
@@ -278,13 +313,18 @@ const subMetricOptions: Record<
   vivabilite: [
     {
       key: "vivabilite_score",
-      label: "Vivabilité score",
-      description: "Composite of all five indicators, equally weighted.",
+      label: "Official score",
+      description: "Default composite from the pipeline weights.",
+    },
+    {
+      key: "essential_connectivity_score",
+      label: "Essential connectivity & services",
+      description: "Composite of transport, healthcare, and daily services access.",
     },
     {
       key: "family_mix",
-      label: "Custom mix",
-      description: "Rebalance the five indicators with your own weights.",
+      label: "Family mix",
+      description: "Custom composite using your weights.",
     },
     ...pillarMeta.map((pillar) => ({
       key: pillar.key,
@@ -377,6 +417,11 @@ const fillLayer: LayerProps = {
       -1, 0.28,
       0, 0.68,
       10, 0.78,
+      ["zoom"],
+      9,
+      0.58,
+      13,
+      0.78,
     ],
     "fill-outline-color": "rgba(15, 23, 42, 0.18)",
   },
@@ -748,7 +793,7 @@ function Metric({
   const styles = {
     light: "bg-white/70 text-slate-950",
     dark: "bg-slate-950 text-white shadow-[0_2px_10px_rgba(15,23,42,0.18)]",
-    green: "bg-[#007AFF] text-white",
+    green: "bg-emerald-600 text-white",
   };
 
   return (
@@ -757,6 +802,7 @@ function Metric({
         <span className="min-w-0 truncate">{label}</span>
         {hint ? <MetricHint labelForA11y={label} text={hint} /> : null}
       </p>
+      <p className="text-[9px] font-medium uppercase tracking-wide opacity-75">{label}</p>
       <p className="mt-0.5 text-[15px] font-semibold leading-tight tracking-tight tabular-nums">
         {value}
       </p>
@@ -882,7 +928,7 @@ function SidebarExpandedContent({
                 </span>
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${
-                    active ? "bg-[#007AFF]" : "bg-slate-300"
+                    active ? "bg-emerald-500" : "bg-slate-300"
                   }`}
                 />
               </button>
@@ -954,7 +1000,7 @@ function SidebarExpandedContent({
                   {feature.properties.arrondissement}
                 </span>
               </span>
-              <span className="shrink-0 text-[13px] font-semibold text-[#007AFF]">
+              <span className="shrink-0 text-[13px] font-semibold text-emerald-700">
                 {formatScore(feature.properties.active_score)}
               </span>
             </button>
@@ -964,6 +1010,11 @@ function SidebarExpandedContent({
         )}
       </div>
 
+      <div className="mt-auto grid grid-cols-3 gap-1.5 border-t border-slate-900/8 p-3 md:block md:space-y-1.5">
+        <Metric label="Zones" value={formatNumber(featureCount)} />
+        <Metric label="Avg" value={formatScore(averageScore)} />
+        <Metric label="Schools" value={`${schoolShare}%`} />
+      </div>
     </div>
   );
 }
@@ -1334,7 +1385,7 @@ function ScoreBreakdown({
   showWeightContributions: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {pillarMeta.map((pillar) => {
         const score = feature[pillar.key];
         const share = effectiveWeight(weights, pillar.key);
@@ -1342,16 +1393,20 @@ function ScoreBreakdown({
           typeof score === "number" ? Number((score * share).toFixed(2)) : null;
 
         return (
-          <div key={pillar.key} className="rounded-lg bg-slate-100/80 px-2 py-1.5">
+          <div key={pillar.key} className="rounded-lg bg-slate-100/80 p-2">
             <div className="mb-1 flex items-center justify-between gap-1.5">
               <div>
                 <p className="text-[12px] font-semibold text-slate-900">{pillar.shortLabel}</p>
-                {showWeightContributions ? (
-                  <p className="text-[10px] leading-snug text-slate-500">
-                    Weight {Math.round(share * 100)}% · contribution{" "}
-                    {formatScore(contribution)}
-                  </p>
-                ) : null}
+                <p className="text-[10px] leading-snug text-slate-500">
+                  {showWeightContributions ? (
+                    <>
+                      Weight {Math.round(share * 100)}% · contribution{" "}
+                      {formatScore(contribution)}
+                    </>
+                  ) : (
+                    <>Pillar score (0–10)</>
+                  )}
+                </p>
               </div>
               <p className="text-[12px] font-semibold tabular-nums text-slate-950">
                 {formatScore(score)}
@@ -1381,6 +1436,9 @@ function DetailsPanel({
   weights,
   mainIndicator,
   selectedMetric,
+  bdcomData,
+  dvfData,
+  irisDataLoading,
   priceLookup,
   onClose,
   onDismissPanel,
@@ -1393,6 +1451,9 @@ function DetailsPanel({
   mainIndicator: MainIndicator;
   selectedMetric: MetricKey;
   priceLookup: Record<string, { prix_m2?: number; loyer_median_m2?: number }>;
+  bdcomData: BdcomIrisStats | null;
+  dvfData: DvfIrisStats | null;
+  irisDataLoading: boolean;
   onClose: () => void;
   onDismissPanel: () => void;
 }) {
@@ -1421,10 +1482,10 @@ function DetailsPanel({
       : `${metricMeta[selectedMetric]?.description ?? "Sub-indicator"} The map is colored by this score.`;
 
   return (
-    <GlassCard className="w-full rounded-t-2xl p-3 md:w-[min(100%,320px)] md:rounded-2xl">
+    <GlassCard className="max-h-[min(62vh,640px)] w-full overflow-y-auto rounded-t-2xl p-3 md:w-[min(100%,320px)] md:rounded-2xl">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#007AFF]">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
             {selected ? "Selected area" : "Best current match"}
           </p>
           <h2 className="mt-1 truncate text-[15px] font-semibold leading-snug tracking-tight text-slate-950">
@@ -1458,7 +1519,7 @@ function DetailsPanel({
         />
       </div>
 
-      <div className={`mt-1.5 grid gap-1.5 ${mainIndicator === "thermal" ? "grid-cols-2" : "grid-cols-3"}`}>
+      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
         <Metric
           label={isVivabilite ? "Original" : "Avg"}
           value={formatScore(isVivabilite ? feature?.vivabilite_score : averageScore)}
@@ -1497,7 +1558,6 @@ function DetailsPanel({
           </div>
         ) : null}
         {feature?.no_data ? (
-          /* ── No-data zone: show reason instead of blank metrics ── */
           <>
             <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
               <p className="text-[10px] font-semibold text-slate-700">
@@ -1538,11 +1598,27 @@ function DetailsPanel({
           </>
         ) : (
           <>
+            <div className="mt-1.5 flex items-center justify-between text-[11px]">
+              <span className="text-slate-500">
+                {feature?.geography === "arrondissement" ? "Arrondissement code" : "IRIS code"}
+              </span>
+              <span className="font-mono text-[10px] font-semibold text-slate-950">
+                {feature?.code_iris ?? feature?.code_arrondissement ?? "N/A"}
+              </span>
+            </div>
             {typeof feature?.loyer_median_m2 === "number" ? (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500">Median rent</span>
                 <span className="font-semibold text-slate-950">
                   {feature.loyer_median_m2.toFixed(1)} €/m²
+                </span>
+              </div>
+            ) : null}
+            {typeof feature?.prix_m2 === "number" ? (
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Median sale price</span>
+                <span className="font-semibold text-slate-950">
+                  {formatNumber(feature.prix_m2)} €/m²
                 </span>
               </div>
             ) : null}
@@ -1591,6 +1667,72 @@ function DetailsPanel({
           <span className="font-semibold text-slate-950">
             {formatNumber((feature as any).revenu_median)} €/an
           </span>
+        </div>
+      ) : null}
+
+      {selected ? (
+        <div className="mt-2.5">
+          <p className="px-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Commerce &amp; Transactions
+          </p>
+          {irisDataLoading ? (
+            <p className="mt-1 rounded-xl bg-slate-100/80 px-2.5 py-2 text-[11px] text-slate-500">
+              Loading zone data...
+            </p>
+          ) : (
+            <div className="mt-1 space-y-1.5">
+              {bdcomData ? (
+                <div className="rounded-xl bg-slate-100/80 p-2">
+                  <p className="text-[10px] font-semibold text-slate-700">Commercial</p>
+                  <div className="mt-1 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Establishments</span>
+                    <span className="font-semibold text-slate-950">{formatNumber(bdcomData.total_establishments)}</span>
+                  </div>
+                  {bdcomData.avg_surface_m2 > 0 ? (
+                    <div className="mt-1 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Avg surface</span>
+                      <span className="font-semibold text-slate-950">{bdcomData.avg_surface_m2.toFixed(0)} m²</span>
+                    </div>
+                  ) : null}
+                  {bdcomData.top_activities.length > 0 ? (
+                    <div className="mt-1 flex items-start justify-between gap-1 text-[11px]">
+                      <span className="shrink-0 text-slate-500">Top activity</span>
+                      <span className="text-right font-semibold leading-snug text-slate-950">{bdcomData.top_activities[0]?.activity}</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-slate-100/80 px-2.5 py-2 text-[11px] text-slate-400">
+                  No commercial data for this zone
+                </div>
+              )}
+              {dvfData ? (
+                <div className="rounded-xl bg-slate-100/80 p-2">
+                  <p className="text-[10px] font-semibold text-slate-700">Transactions (DVF)</p>
+                  <div className="mt-1 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Transactions</span>
+                    <span className="font-semibold text-slate-950">{formatNumber(dvfData.total_transactions)}</span>
+                  </div>
+                  {dvfData.median_prix_m2 > 0 ? (
+                    <div className="mt-1 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Median €/m²</span>
+                      <span className="font-semibold text-slate-950">{formatNumber(Math.round(dvfData.median_prix_m2))} €</span>
+                    </div>
+                  ) : null}
+                  {dvfData.median_surface_m2 > 0 ? (
+                    <div className="mt-1 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Median surface</span>
+                      <span className="font-semibold text-slate-950">{dvfData.median_surface_m2.toFixed(0)} m²</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-slate-100/80 px-2.5 py-2 text-[11px] text-slate-400">
+                  No transaction data for this zone
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : null}
       {mainIndicator === "demographics" && typeof (feature as any)?.gini === "number" ? (
@@ -1766,6 +1908,9 @@ export function EnhancedMapDashboard() {
   const [showDetails, setShowDetails] = useState(true);
   const [showHoverPreview, setShowHoverPreview] = useState(true);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [bdcomIrisData, setBdcomIrisData] = useState<BdcomIrisStats | null>(null);
+  const [dvfIrisData, setDvfIrisData] = useState<DvfIrisStats | null>(null);
+  const [irisDataLoading, setIrisDataLoading] = useState(false);
 
   useEffect(() => {
     if (uiHidden) {
@@ -1778,12 +1923,16 @@ export function EnhancedMapDashboard() {
 
     fetchVivabiliteMap()
       .then((geojson) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
         setVivabiliteData(geojson);
         setError(null);
       })
       .catch((err: Error) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
         setError(err.message);
       })
       .finally(() => {
@@ -1844,14 +1993,14 @@ export function EnhancedMapDashboard() {
           const geojson = await fetchDemographicsMap();
           if (active) {
             setDemographicsData(geojson);
-        }  
+        }
         } else {
           const geojson = await fetchVivabiliteMap();
           if (active) {
             setVivabiliteData(geojson);
           }
         }
-        
+
       } catch (err) {
         if (active) {
           setError(err instanceof Error ? err.message : "Map layer unavailable");
@@ -1894,6 +2043,13 @@ export function EnhancedMapDashboard() {
   }, []);
 
   useEffect(() => {
+    if (!selectedCode || !/^\d{9}$/.test(selectedCode)) {
+      setBdcomIrisData(null);
+      setDvfIrisData(null);
+      setIrisDataLoading(false);
+      return;
+    }
+
     let active = true;
     Promise.all([fetchRentMap(), fetchSaleMap()])
       .then(([rent, sale]) => {
@@ -1902,10 +2058,22 @@ export function EnhancedMapDashboard() {
         setSaleData((prev) => prev ?? sale);
       })
       .catch(() => {});
+    setIrisDataLoading(true);
+
+    Promise.all([
+      fetchBdcomByIris(selectedCode).catch(() => null),
+      fetchDvfByIris(selectedCode).catch(() => null),
+    ]).then(([bdcom, dvf]) => {
+      if (!active) return;
+      setBdcomIrisData(bdcom);
+      setDvfIrisData(dvf);
+      setIrisDataLoading(false);
+    });
+
     return () => {
       active = false;
     };
-  }, []);
+  }, [selectedCode]);
 
   const sourceData = useMemo(() => {
     if (mainIndicator === "thermal") return thermalData;
@@ -2242,8 +2410,8 @@ export function EnhancedMapDashboard() {
                 setPopup(null);
               }}
             >
-              <div className="max-w-[220px] p-1.5">
-                <p className="text-[8px] font-semibold uppercase tracking-wide text-[#007AFF]">
+              <div className="max-w-[200px] p-1.5">
+                <p className="text-[8px] font-semibold uppercase tracking-wide text-emerald-700">
                   {selected ? "Selected" : "Preview"}
                 </p>
                 <p className="mt-0.5 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-950">
@@ -2371,7 +2539,7 @@ export function EnhancedMapDashboard() {
             {!uiHidden && showTitleCard ? (
               <GlassCard className="pointer-events-auto max-w-xl rounded-2xl p-2.5 md:p-3">
                 <div className="flex flex-wrap items-center gap-1">
-                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#007AFF] ring-1 ring-[#007AFF]/15">
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-700 ring-1 ring-emerald-600/15">
                     Urban Data Explorer
                   </span>
                   <span className="rounded-full bg-white/70 px-2 py-0.5 text-[9px] font-medium text-slate-500 ring-1 ring-slate-900/5">
@@ -2479,7 +2647,10 @@ export function EnhancedMapDashboard() {
             {!uiHidden && showDetails ? (
               <DetailsPanel
                 averageScore={stats.averageScore}
+                bdcomData={bdcomIrisData}
+                dvfData={dvfIrisData}
                 featureCount={stats.featureCount}
+                irisDataLoading={irisDataLoading}
                 mainIndicator={mainIndicator}
                 onClose={() => {
                   setSelectedCode(null);

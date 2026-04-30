@@ -39,7 +39,7 @@ def process_thermal_comfort_silver() -> pd.DataFrame:
     count_arbres = arbres_iris.groupby("code_iris").size().reset_index(name="nb_arbres")
 
     # Calcul de la surface totale des îlots de fraîcheur par iris :
-    # On fait une intersection entre les îlots et les iris pour connaître la surface 
+    # On fait une intersection entre les îlots et les iris pour connaître la surface
     # d'ilot dans chaque iris
     ilots_iris = gpd.overlay(ilots, iris[['code_iris', 'geometry']], how="intersection")
     ilots_iris["area_ilot"] = ilots_iris.geometry.area
@@ -47,8 +47,10 @@ def process_thermal_comfort_silver() -> pd.DataFrame:
     # Agrégation par IRIS
     surf_ilots = ilots_iris.groupby("code_iris")["area_ilot"].sum().reset_index(name="total_area_ilot")
 
+    # --- 4. Assemblage final ---
     # On ajoute la surface de l'IRIS lui-même
     iris["surface_iris"] = iris.geometry.area
+
     # Merge des stats sur le GeoDataFrame IRIS
     silver_gdf = iris.merge(count_arbres, on="code_iris", how="left")
     silver_gdf = silver_gdf.merge(surf_ilots, on="code_iris", how="left")

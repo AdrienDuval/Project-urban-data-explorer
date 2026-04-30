@@ -5,6 +5,7 @@ from src.config import THERMAL_COMFORT_SILVER, THERMAL_COMFORT_GOLD
 from src.db import engine
 
 
+
 def process_thermal_comfort_gold():
     print("[thermal_comfort] Loading Silver thermal comfort data...")
     df = gpd.read_file(THERMAL_COMFORT_SILVER)
@@ -14,9 +15,10 @@ def process_thermal_comfort_gold():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # De,sité d'arbres et ratio de surface d'îlot de fraîcheur par 
+    # De,sité d'arbres et ratio de surface d'îlot de fraîcheur par
     # rapport à la surface totale de l'IRIS
     df["densite_arbres"] = df["nb_arbres"] / (df["surface_iris"] / 10000)
+    # % de surface en îlot de fraîcheur
     df["ratio_fraicheur"] = df["total_area_ilot"] / df["surface_iris"]
 
     # Normalisation robuste (percentile) sur 0-10
@@ -46,12 +48,20 @@ def process_thermal_comfort_gold():
 
     proximity_scores = np.zeros(len(df))
     RADIUS = 800  # mètres — rayon de voisinage
+    # 3. Normalisation Min-Max (0 à 100)
+    for col in ["densite_arbres", "ratio_fraicheur"]:
+        min_val = df[col].min()
+        max_val = df[col].max()
+        df[f"score_{col}"] = (df[col] - min_val) / (max_val - min_val) * 100
 
+    # 4. Indice Final (0.4 Arbres + 0.6 Fraîcheur)
+    df["indice_confort_thermique"] = (df["score_densite_arbres"] * 0.4) + (df["score_ratio_fraicheur"] * 0.6)
     for i in range(len(df)):
         dx = coords[:, 0] - coords[i, 0]
         dy = coords[:, 1] - coords[i, 1]
         distances = np.sqrt(dx**2 + dy**2)
 
+    # 5. Export des colonnes essentielles pour le Dashboard
         # Voisins dans le rayon (exclu soi-même)
         mask = (distances > 0) & (distances <= RADIUS)
         if mask.sum() == 0:
@@ -89,6 +99,8 @@ def process_thermal_comfort_gold():
 
     # Export
     cols_to_keep = [
+        "code_iris", "nom_iris", "densite_arbres",
+        "ratio_fraicheur", "indice_confort_thermique", "geometry"
         "code_iris", "nom_iris", "arrondissement",
         "densite_arbres", "ratio_fraicheur",
         "tree_density_score", "cooling_area_score",
@@ -96,8 +108,11 @@ def process_thermal_comfort_gold():
         "indice_confort_thermique",
         "geometry"
     ]
-
+    
     gdf_final = df[cols_to_keep].copy()
+
+    # 6. Insertion en base de données MySQL
+    # Convertir la géométrie en WKT (Well-Known Text) pour MySQL
 
     # Reprojection WGS84 pour Mapbox
     if gdf_final.crs and gdf_final.crs.to_epsg() != 4326:

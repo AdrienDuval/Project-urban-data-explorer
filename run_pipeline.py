@@ -16,6 +16,7 @@ import argparse
 
 from src.data_loader import load_data
 from src.gold.green_spaces_score import compute_green_spaces_score
+from src.gold.family_support_scores import compute_family_support_scores
 from src.gold.reference import load_reference_tables
 from src.gold.school_density import compute_school_density
 from src.gold.services_score import compute_services_score
@@ -86,6 +87,7 @@ def run_gold() -> None:
     compute_transport_points()
     compute_services_score()
     compute_green_spaces_score()
+    compute_family_support_scores()
     compute_vivabilite_familiale()
     process_thermal_comfort_gold()
     process_sale_price_median_to_gold()
