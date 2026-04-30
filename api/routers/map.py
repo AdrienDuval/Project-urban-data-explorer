@@ -46,6 +46,40 @@ def get_thermal_comfort_map(store: DataStoreDep) -> dict[str, Any]:
 
 
 @router.get(
+    "/commercial-density",
+    response_model=None,
+    summary="IRIS GeoJSON with commercial establishment density",
+    description=(
+        "Return an IRIS-level GeoJSON FeatureCollection with establishment count, "
+        "average surface area, and a 0–10 commercial density score derived from BDCOM data."
+    ),
+)
+def get_commercial_density_map(store: DataStoreDep) -> dict[str, Any]:
+    try:
+        return map_service.build_commercial_density_geojson(store)
+    except map_service.MapDataUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get(
+    "/housing/dvf-iris",
+    response_model=None,
+    summary="IRIS GeoJSON with DVF median housing price per m²",
+    description=(
+        "Return an IRIS-level GeoJSON FeatureCollection with median transaction "
+        "price per m², transaction count, and a 0–10 affordability score "
+        "(higher = more affordable). More granular than the arrondissement-level "
+        "rent and sale layers."
+    ),
+)
+def get_dvf_price_map(store: DataStoreDep) -> dict[str, Any]:
+    try:
+        return map_service.build_dvf_price_geojson(store)
+    except map_service.MapDataUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get(
     "/housing/rent",
     response_model=None,
     summary="Arrondissement GeoJSON enriched with median rent scores",

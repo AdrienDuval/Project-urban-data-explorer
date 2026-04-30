@@ -163,6 +163,35 @@ class DataStore:
             logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", SALE_PRICE_GOLD)
             sale_price_scores = gpd.GeoDataFrame()
 
+<<<<<<< Updated upstream
+=======
+        if BDCOM_GOLD.exists():
+            logger.info("Loading gold: %s", BDCOM_GOLD.name)
+            bdcom_scores = pd.read_csv(BDCOM_GOLD, dtype={"code_iris": str})
+            if "code_iris" in bdcom_scores.columns:
+                bdcom_scores["code_iris"] = bdcom_scores["code_iris"].replace(
+                    {"nan": None, "None": None, "": None}
+                )
+                bdcom_scores["code_iris"] = bdcom_scores["code_iris"].str.zfill(9)
+            logger.info("  → %d establishments loaded", len(bdcom_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py`", BDCOM_GOLD)
+            bdcom_scores = pd.DataFrame()
+
+        if DVF_GOLD.exists():
+            logger.info("Loading gold: %s", DVF_GOLD.name)
+            dvf_scores = pd.read_csv(DVF_GOLD, dtype={"code_iris": str})
+            if "code_iris" in dvf_scores.columns:
+                dvf_scores["code_iris"] = dvf_scores["code_iris"].replace(
+                    {"nan": None, "None": None, "": None}
+                )
+                dvf_scores["code_iris"] = dvf_scores["code_iris"].str.zfill(9)
+            logger.info("  → %d transactions loaded", len(dvf_scores))
+        else:
+            logger.warning("Gold file not found: %s — run `python run_pipeline.py`", DVF_GOLD)
+            dvf_scores = pd.DataFrame()
+
+>>>>>>> Stashed changes
         return cls(
             iris_scores=_clean_df(iris_scores),
             schools=_clean_df(schools),

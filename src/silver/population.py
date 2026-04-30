@@ -31,5 +31,5 @@ def process_population() -> pd.DataFrame:
     paris = paris[paris["population"] > MIN_POPULATION]
 
     paris.to_csv(POPULATION_SILVER, index=False)
-    print(f"[population] {len(paris)} IRIS zones saved → {POPULATION_SILVER.name}")
+    # print(f"[population] {len(paris)} IRIS zones saved → {POPULATION_SILVER.name}")
     return paris

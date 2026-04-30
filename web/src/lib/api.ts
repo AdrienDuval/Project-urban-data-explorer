@@ -1,4 +1,6 @@
 import type {
+  BdcomIrisStats,
+  DvfIrisStats,
   IndicatorMapFeatureCollection,
   TransportPoint,
   VivabiliteFeatureCollection,
@@ -61,6 +63,28 @@ export async function fetchSaleMap(): Promise<IndicatorMapFeatureCollection> {
   }
 
   return response.json() as Promise<IndicatorMapFeatureCollection>;
+}
+
+export async function fetchBdcomByIris(codeIris: string): Promise<BdcomIrisStats> {
+  const response = await fetch(
+    `${API_URL}/bdcom/by-iris/${encodeURIComponent(codeIris)}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+  return response.json() as Promise<BdcomIrisStats>;
+}
+
+export async function fetchDvfByIris(codeIris: string): Promise<DvfIrisStats> {
+  const response = await fetch(
+    `${API_URL}/dvf/by-iris/${encodeURIComponent(codeIris)}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+  return response.json() as Promise<DvfIrisStats>;
 }
 
 export async function fetchTransportPoints(): Promise<TransportPoint[]> {
