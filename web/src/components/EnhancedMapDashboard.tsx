@@ -356,34 +356,27 @@ const fillLayer: LayerProps = {
   id: "vivabilite-fill",
   type: "fill",
   paint: {
+    // coalesce falls back to -1 when active_score is null/missing;
+    // the -1 stop renders gray so excluded zones look distinct
     "fill-color": [
-      "case",
-      ["!=", ["typeof", ["get", "active_score"]], "number"],
-      "#cbd5e1", // light slate-gray for excluded zones (A/D/H-gap)
-      [
-        "interpolate",
-        ["linear"],
-        ["get", "active_score"],
-        0,
-        "#f43f5e",
-        2,
-        "#fb923c",
-        4,
-        "#fbbf24",
-        6,
-        "#a3e635",
-        8,
-        "#22c55e",
-        10,
-        "#047857",
-      ],
+      "interpolate",
+      ["linear"],
+      ["coalesce", ["to-number", ["get", "active_score"], -1], -1],
+      -1, "#e2e8f0",
+      0, "#f43f5e",
+      2, "#fb923c",
+      4, "#fbbf24",
+      6, "#a3e635",
+      8, "#22c55e",
+      10, "#047857",
     ],
-    // Excluded zones get a flat low opacity; scored zones scale with zoom
     "fill-opacity": [
-      "case",
-      ["!=", ["typeof", ["get", "active_score"]], "number"],
-      0.3,
-      ["interpolate", ["linear"], ["zoom"], 9, 0.58, 13, 0.78],
+      "interpolate",
+      ["linear"],
+      ["coalesce", ["to-number", ["get", "active_score"], -1], -1],
+      -1, 0.28,
+      0, 0.68,
+      10, 0.78,
     ],
     "fill-outline-color": "rgba(15, 23, 42, 0.18)",
   },
@@ -473,6 +466,51 @@ function formatScore(value: number | null | undefined) {
 
 function formatNumber(value: number | null | undefined) {
   return typeof value === "number" ? Intl.NumberFormat("fr-FR").format(value) : "N/A";
+}
+
+/** Short explanations for metric tiles (sidebar + detail panel). */
+const UI_HINTS = {
+  zones:
+    "Number of zones still shown after search, arrondissement filter, and minimum score. IRIS units at detailed zoom; arrondissement polygons when zoomed out.",
+  sidebarAvg:
+    "Mean of the headline score (0–10) over all visible zones. Each zone counts equally (not weighted by population).",
+  schoolsWeight:
+    "Share of the Schools pillar in your slider weights (family livability). This is not the proportion of schools in Paris.",
+  dynamicRank:
+    "Rank by the headline score among zones in the current view only (after filters). 1 is the best visible zone.",
+  percentile:
+    "How this zone compares to other visible zones on the headline score after filters. Higher is better; top zone in the list is 100%.",
+  delta:
+    "Headline score minus the stored vivabilité composite from the pipeline. On a single pillar, headline is that pillar—so you see how it differs from the overall score.",
+  originalScore:
+    "Fixed overall family livability from the data pipeline (standard composite). Compare to the headline when you use Custom mix or another sub-indicator.",
+  avgCompare:
+    "Mean headline score across all visible zones—the same value as Avg in the sidebar.",
+  pillarStrong:
+    "Pillar with the highest 0–10 score for this zone among schools, transport, services, green space, and healthcare.",
+  pillarWeak:
+    "Pillar with the lowest 0–10 score for this zone among the five livability themes.",
+} as const;
+
+function MetricHint({ text, labelForA11y }: { text: string; labelForA11y: string }) {
+  return (
+    <span className="group/hint relative ml-0.5 inline-flex shrink-0 align-middle">
+      <button
+        aria-label={`About ${labelForA11y}`}
+        className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-current/35 text-[9px] font-bold leading-none opacity-65 hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#007AFF]/50"
+        title={text}
+        type="button"
+      >
+        ?
+      </button>
+      <span
+        className="invisible absolute left-0 top-full z-[70] mt-1.5 w-[min(272px,calc(100vw-2.5rem))] rounded-lg border border-slate-200/90 bg-white px-2.5 py-2 text-left text-[10px] font-normal normal-case leading-snug tracking-normal text-slate-700 shadow-xl opacity-0 transition-opacity duration-150 group-hover/hint:visible group-hover/hint:opacity-100 group-focus-within/hint:visible group-focus-within/hint:opacity-100"
+        role="tooltip"
+      >
+        {text}
+      </span>
+    </span>
+  );
 }
 
 function clampWeight(value: number) {
@@ -700,10 +738,12 @@ function Metric({
   label,
   value,
   tone = "light",
+  hint,
 }: {
   label: string;
   value: string;
   tone?: "light" | "dark" | "green";
+  hint?: string;
 }) {
   const styles = {
     light: "bg-white/70 text-slate-950",
@@ -713,7 +753,10 @@ function Metric({
 
   return (
     <div className={`rounded-xl px-2 py-1.5 ${styles[tone]}`}>
-      <p className="text-[9px] font-medium uppercase tracking-wide opacity-75">{label}</p>
+      <p className="flex items-center gap-0.5 text-[9px] font-medium uppercase tracking-wide opacity-75">
+        <span className="min-w-0 truncate">{label}</span>
+        {hint ? <MetricHint labelForA11y={label} text={hint} /> : null}
+      </p>
       <p className="mt-0.5 text-[15px] font-semibold leading-tight tracking-tight tabular-nums">
         {value}
       </p>
@@ -913,11 +956,6 @@ function SidebarExpandedContent({
         )}
       </div>
 
-      <div className="mt-auto grid grid-cols-3 gap-1.5 border-t border-slate-900/8 p-3 md:block md:space-y-1.5">
-        <Metric label="Zones" value={formatNumber(featureCount)} />
-        <Metric label="Avg" value={formatScore(averageScore)} />
-        <Metric label="Schools" value={`${schoolShare}%`} />
-      </div>
     </div>
   );
 }
@@ -1281,7 +1319,7 @@ function ScoreBreakdown({
   showWeightContributions: boolean;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {pillarMeta.map((pillar) => {
         const score = feature[pillar.key];
         const share = effectiveWeight(weights, pillar.key);
@@ -1289,20 +1327,16 @@ function ScoreBreakdown({
           typeof score === "number" ? Number((score * share).toFixed(2)) : null;
 
         return (
-          <div key={pillar.key} className="rounded-lg bg-slate-100/80 p-2">
+          <div key={pillar.key} className="rounded-lg bg-slate-100/80 px-2 py-1.5">
             <div className="mb-1 flex items-center justify-between gap-1.5">
               <div>
                 <p className="text-[12px] font-semibold text-slate-900">{pillar.shortLabel}</p>
-                <p className="text-[10px] leading-snug text-slate-500">
-                  {showWeightContributions ? (
-                    <>
-                      Weight {Math.round(share * 100)}% · contribution{" "}
-                      {formatScore(contribution)}
-                    </>
-                  ) : (
-                    <>Pillar score (0–10)</>
-                  )}
-                </p>
+                {showWeightContributions ? (
+                  <p className="text-[10px] leading-snug text-slate-500">
+                    Weight {Math.round(share * 100)}% · contribution{" "}
+                    {formatScore(contribution)}
+                  </p>
+                ) : null}
               </div>
               <p className="text-[12px] font-semibold tabular-nums text-slate-950">
                 {formatScore(score)}
@@ -1332,6 +1366,7 @@ function DetailsPanel({
   weights,
   mainIndicator,
   selectedMetric,
+  priceLookup,
   onClose,
   onDismissPanel,
 }: {
@@ -1342,12 +1377,16 @@ function DetailsPanel({
   weights: Weights;
   mainIndicator: MainIndicator;
   selectedMetric: MetricKey;
+  priceLookup: Record<string, { prix_m2?: number; loyer_median_m2?: number }>;
   onClose: () => void;
   onDismissPanel: () => void;
 }) {
   const feature = selected ?? topFeature?.properties ?? null;
   const metricLabel = metricMeta[selectedMetric]?.label ?? "Score";
   const isVivabilite = mainIndicator === "vivabilite";
+  const priceInfo = feature?.arrondissement ? priceLookup[feature.arrondissement] : undefined;
+  const displayPrixM2 = feature?.prix_m2 ?? priceInfo?.prix_m2;
+  const displayLoyerM2 = feature?.loyer_median_m2 ?? priceInfo?.loyer_median_m2;
   const bestPillar = feature && isVivabilite
     ? pillarMeta
         .map((pillar) => ({ ...pillar, value: feature[pillar.key] }))
@@ -1361,8 +1400,13 @@ function DetailsPanel({
         .sort((a, b) => (a.value ?? 0) - (b.value ?? 0))[0]
     : null;
 
+  const headlineHint =
+    selectedMetric === "family_mix"
+      ? "Weighted average of the five pillars using your sliders. The map is colored by this headline score."
+      : `${metricMeta[selectedMetric]?.description ?? "Sub-indicator"} The map is colored by this score.`;
+
   return (
-    <GlassCard className="max-h-[min(62vh,640px)] w-full overflow-y-auto rounded-t-2xl p-3 md:w-[min(100%,320px)] md:rounded-2xl">
+    <GlassCard className="w-full rounded-t-2xl p-3 md:w-[min(100%,320px)] md:rounded-2xl">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[#007AFF]">
@@ -1566,39 +1610,12 @@ function DetailsPanel({
       ) : (
         /* ── Scored zone: full metrics ── */
         <>
-          <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+          <div className="mt-2.5">
             <Metric
+              hint={headlineHint}
               label={metricLabel}
               tone="green"
               value={formatScore(feature?.active_score ?? averageScore)}
-            />
-            <Metric
-              label="Dynamic rank"
-              tone="dark"
-              value={feature?.active_rank ? `#${feature.active_rank}` : "N/A"}
-            />
-          </div>
-
-          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-            <Metric
-              label={isVivabilite ? "Original" : "Avg"}
-              value={formatScore(isVivabilite ? feature?.vivabilite_score : averageScore)}
-            />
-            <Metric
-              label="Delta"
-              value={
-                typeof feature?.score_delta === "number"
-                  ? `${feature.score_delta >= 0 ? "+" : ""}${feature.score_delta.toFixed(1)}`
-                  : "N/A"
-              }
-            />
-            <Metric
-              label="Percentile"
-              value={
-                typeof feature?.active_percentile === "number"
-                  ? `${feature.active_percentile}%`
-                  : "N/A"
-              }
             />
           </div>
 
@@ -1621,19 +1638,19 @@ function DetailsPanel({
                 {feature?.code_iris ?? feature?.code_arrondissement ?? "N/A"}
               </span>
             </div>
-            {typeof feature?.loyer_median_m2 === "number" ? (
+            {typeof displayLoyerM2 === "number" ? (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500">Median rent</span>
                 <span className="font-semibold text-slate-950">
-                  {feature.loyer_median_m2.toFixed(1)} €/m²
+                  {displayLoyerM2.toFixed(1)} €/m²
                 </span>
               </div>
             ) : null}
-            {typeof feature?.prix_m2 === "number" ? (
+            {typeof displayPrixM2 === "number" ? (
               <div className="mt-1.5 flex items-center justify-between text-[11px]">
                 <span className="text-slate-500">Median sale price</span>
                 <span className="font-semibold text-slate-950">
-                  {formatNumber(feature.prix_m2)} €/m²
+                  {formatNumber(displayPrixM2)} €/m²
                 </span>
               </div>
             ) : null}
@@ -1646,23 +1663,6 @@ function DetailsPanel({
               </div>
             ) : null}
           </div>
-
-          {bestPillar && weakestPillar ? (
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              <div className="rounded-lg bg-blue-50 p-2">
-                <p className="text-[9px] font-medium text-[#007AFF]">Strongest pillar</p>
-                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
-                  {bestPillar.shortLabel} · {formatScore(bestPillar.value)}
-                </p>
-              </div>
-              <div className="rounded-lg bg-rose-50 p-2">
-                <p className="text-[9px] font-medium text-rose-700">Weakest pillar</p>
-                <p className="mt-0.5 text-[11px] font-semibold leading-snug text-slate-950">
-                  {weakestPillar.shortLabel} · {formatScore(weakestPillar.value)}
-                </p>
-              </div>
-            </div>
-          ) : null}
 
           {feature && isVivabilite ? (
             <div className="mt-2.5">
@@ -1859,6 +1859,20 @@ export function EnhancedMapDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([fetchRentMap(), fetchSaleMap()])
+      .then(([rent, sale]) => {
+        if (!active) return;
+        setRentData((prev) => prev ?? rent);
+        setSaleData((prev) => prev ?? sale);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const sourceData = useMemo(() => {
     if (mainIndicator === "thermal") return thermalData;
     if (mainIndicator === "housing") return selectedMetric === "sale_score" ? saleData : rentData;
@@ -1905,6 +1919,23 @@ export function EnhancedMapDashboard() {
       featureCount: features.length,
     };
   }, [displayData]);
+
+  const priceLookup = useMemo(() => {
+    const lookup: Record<string, { prix_m2?: number; loyer_median_m2?: number }> = {};
+    saleData?.features.forEach((f) => {
+      const arr = f.properties.arrondissement;
+      if (arr && typeof f.properties.prix_m2 === "number") {
+        lookup[arr] = { ...lookup[arr], prix_m2: f.properties.prix_m2 };
+      }
+    });
+    rentData?.features.forEach((f) => {
+      const arr = f.properties.arrondissement;
+      if (arr && typeof f.properties.loyer_median_m2 === "number") {
+        lookup[arr] = { ...lookup[arr], loyer_median_m2: f.properties.loyer_median_m2 };
+      }
+    });
+    return lookup;
+  }, [saleData, rentData]);
 
   const selected =
     displayData?.features.find((feature) => feature.properties.map_id === selectedCode)
@@ -2137,13 +2168,15 @@ export function EnhancedMapDashboard() {
           style={{ height: "100%", width: "100%" }}
         >
           <NavigationControl position="bottom-right" />
-          {displayData ? (
-            <Source data={displayData} id="vivabilite-source" type="geojson">
-              <Layer {...fillLayer} />
-              <Layer {...outlineLayer} />
-              <Layer {...activeLayer} />
-            </Source>
-          ) : null}
+          <Source
+            data={displayData ?? { type: "FeatureCollection", features: [] }}
+            id="vivabilite-source"
+            type="geojson"
+          >
+            <Layer {...fillLayer} />
+            <Layer {...outlineLayer} />
+            <Layer {...activeLayer} />
+          </Source>
 
           {showTransportMarkers ? (
             <Source
@@ -2418,6 +2451,7 @@ export function EnhancedMapDashboard() {
                   setPopup(null);
                 }}
                 onDismissPanel={() => setShowDetails(false)}
+                priceLookup={priceLookup}
                 selected={selected}
                 selectedMetric={selectedMetric}
                 topFeature={stats.topFeature}
