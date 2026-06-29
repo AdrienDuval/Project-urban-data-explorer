@@ -183,3 +183,22 @@ cython_debug/
 **/base-ic-evol-struct-pop-2022.csv
 UrbanDataExplorer.pdf
 base_datasets_fr.md
+
+# AI assistant guidance & config
+# Instruction/guidance files for Claude, Cursor, Copilot, Gemini, Aider, etc.
+.claude/
+CLAUDE.md
+**/CLAUDE.md
+AGENTS.md
+**/AGENTS.md
+GEMINI.md
+**/GEMINI.md
+MEMORY.md
+**/MEMORY.md
+CHANGE_SUMMARY.md
+**/CHANGE_SUMMARY.md
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md
+**/copilot*.xml

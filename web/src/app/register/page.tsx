@@ -34,7 +34,7 @@ export default function RegisterPage() {
           router.push("/dashboard");
           return;
         } catch {
-          setError("Account may already exist — try signing in instead.");
+          setError("Account may already exist. Try signing in instead.");
           setLoading(false);
           return;
         }

@@ -6,7 +6,7 @@ and keeps only the columns needed downstream.
 """
 import pandas as pd
 
-from src.config import POPULATION_RAW, POPULATION_SILVER
+from src.config import POPULATION_RAW, POPULATION_SILVER, MIN_POPULATION
 
 
 def process_population() -> pd.DataFrame:

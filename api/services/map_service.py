@@ -149,10 +149,10 @@ def build_vivabilite_geojson(spatial: SpatialStore) -> dict[str, Any]:
                 "geography": "iris",
                 "no_data": False,
             }
-        for key, value in score.items():
-            if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
-                continue
-            map_properties[key] = _clean_value(value)
+            for key, value in score.items():
+                if key in {"IRIS", "code_iris", "LIBIRIS", "LIBCOM", "GRD_QUART"}:
+                    continue
+                map_properties[key] = _clean_value(value)
 
         joined_features.append({
             "type": "Feature",
@@ -295,6 +295,82 @@ def build_sale_geojson(spatial: SpatialStore) -> dict[str, Any]:
     return _geojson_from_gdf(gdf[keep_cols], required_score="sale_score")
 
 
+@cached(cache=_cache, lock=_lock, key=lambda spatial: hashkey("sale-timeline"))
+def build_sale_timeline_geojson(spatial: SpatialStore) -> dict[str, Any]:
+    """Return arrondissement sale-price polygons with a full per-period series.
+
+    Each feature carries static geometry plus ``prices_by_period`` and
+    ``scores_by_period`` dicts (keyed by ``YYYY-MM-DD`` quarter start) so the
+    frontend timeline can recolor the choropleth as the user scrubs through
+    quarters. The affordability score is normalised **globally** across every
+    period so the colour scale stays stable while replaying history.
+
+    The top-level ``periods`` list is sorted ascending for the slider.
+    """
+    gdf = spatial.sale_price_scores.copy()
+    if gdf.empty:
+        raise MapDataUnavailableError(
+            "Sale price scores are not loaded. Run `python run_pipeline.py --gold` "
+            "before requesting this map layer."
+        )
+    if "date_periode" not in gdf.columns:
+        raise MapDataUnavailableError("Sale price scores are missing `date_periode`.")
+
+    gdf["date_periode"] = pd.to_datetime(gdf["date_periode"], errors="coerce")
+    gdf = gdf.dropna(subset=["date_periode", "prix_m2"])
+    if gdf.empty:
+        raise MapDataUnavailableError("Sale price scores have no dated rows.")
+
+    gdf["sale_score"] = _normalise_0_10(gdf["prix_m2"], higher_is_better=False)
+    gdf["period"] = gdf["date_periode"].dt.strftime("%Y-%m-%d")
+
+    periods = sorted(gdf["period"].unique())
+
+    features: list[dict[str, Any]] = []
+    for c_ar, group in gdf.groupby("c_ar"):
+        group = group.sort_values("date_periode")
+        latest = group.iloc[-1]
+        if latest.geometry is None or latest.geometry.is_empty:
+            continue
+
+        prices_by_period = {
+            row["period"]: _clean_value(round(float(row["prix_m2"]), 2))
+            for _, row in group.iterrows()
+        }
+        scores_by_period = {
+            row["period"]: _clean_value(row["sale_score"])
+            for _, row in group.iterrows()
+        }
+
+        code = str(c_ar)
+        properties = {
+            "map_id": f"sale-{code}",
+            "geography": "arrondissement",
+            "code_arrondissement": code,
+            "name": _clean_value(latest.get("l_aroff")) or _clean_value(latest.get("l_ar")),
+            "arrondissement": _arrondissement_label(code),
+            # Defaults so the layer renders even before a period is selected.
+            "sale_score": _clean_value(latest["sale_score"]),
+            "prix_m2": _clean_value(round(float(latest["prix_m2"]), 2)),
+            "Trimestre": _clean_value(latest.get("Trimestre")),
+            "date_periode": latest["period"],
+            "prices_by_period": prices_by_period,
+            "scores_by_period": scores_by_period,
+        }
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": latest.geometry.__geo_interface__,
+                "properties": properties,
+            }
+        )
+
+    if not features:
+        raise MapDataUnavailableError("No arrondissement geometries for the sale timeline.")
+
+    return {"type": "FeatureCollection", "periods": periods, "features": features}
+
+
 @cached(cache=_cache, lock=_lock, key=lambda spatial: hashkey("demographics"))
 def build_demographics_geojson(spatial: SpatialStore) -> dict[str, Any]:
     features_base = spatial.iris_geojson.get("features", [])
@@ -318,7 +394,7 @@ def build_demographics_geojson(spatial: SpatialStore) -> dict[str, Any]:
             "properties": {
                 "map_id": code_iris,
                 "code_iris": code_iris,
-                "name": _clean_value(score.get("nom_iris")) or props.get("nom_iris"),
+                "name": props.get("nom_iris") or _clean_value(score.get("nom_iris")),
                 "arrondissement": _clean_value(score.get("arrondissement"))
                     or _arrondissement_label(code_iris[3:5]),
                 "geography": "iris",
