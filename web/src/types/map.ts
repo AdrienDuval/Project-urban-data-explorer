@@ -64,6 +64,10 @@ export type IndicatorMapProperties = Partial<VivabiliteProperties> & {
   prix_m2?: number | null;
   Trimestre?: string | null;
   date_periode?: string | null;
+  /** Median sale €/m² per quarter (YYYY-MM-DD → price), for the timeline. */
+  prices_by_period?: Record<string, number | null>;
+  /** Affordability score per quarter (YYYY-MM-DD → 0–10), for the timeline. */
+  scores_by_period?: Record<string, number | null>;
 };
 
 export type VivabiliteFeature = Feature<Geometry, VivabiliteProperties>;
@@ -79,6 +83,11 @@ export type IndicatorMapFeatureCollection = FeatureCollection<
   Geometry,
   IndicatorMapProperties
 >;
+
+/** Sale-price layer carrying a full quarterly series plus the sorted period list. */
+export type SaleTimelineFeatureCollection = IndicatorMapFeatureCollection & {
+  periods: string[];
+};
 
 export type BdcomIrisStats = {
   code_iris: string;

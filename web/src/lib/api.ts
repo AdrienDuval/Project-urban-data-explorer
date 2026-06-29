@@ -2,6 +2,7 @@ import type {
   BdcomIrisStats,
   DvfIrisStats,
   IndicatorMapFeatureCollection,
+  SaleTimelineFeatureCollection,
   TransportPoint,
   VivabiliteFeatureCollection,
 } from "@/types/map";
@@ -165,6 +166,18 @@ export async function fetchSaleMap(): Promise<IndicatorMapFeatureCollection> {
   }
 
   return response.json() as Promise<IndicatorMapFeatureCollection>;
+}
+
+export async function fetchSaleTimeline(): Promise<SaleTimelineFeatureCollection> {
+  const response = await fetch(`${API_URL}/map/housing/sale/timeline`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+
+  return response.json() as Promise<SaleTimelineFeatureCollection>;
 }
 
 export async function fetchBdcomByIris(codeIris: string): Promise<BdcomIrisStats> {

@@ -90,6 +90,24 @@ def get_sale_map(store: DataStoreDep) -> dict[str, Any]:
 
 
 @router.get(
+    "/housing/sale/timeline",
+    response_model=None,
+    summary="Arrondissement sale-price GeoJSON with a full quarterly time series",
+    description=(
+        "Return arrondissement polygons where each feature carries "
+        "`prices_by_period` and `scores_by_period` dicts plus a top-level "
+        "`periods` list, so the frontend timeline can replay the historical "
+        "evolution of median sale prices per m²."
+    ),
+)
+def get_sale_timeline_map(store: DataStoreDep) -> dict[str, Any]:
+    try:
+        return map_service.build_sale_timeline_geojson(store)
+    except map_service.MapDataUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get(
     "/demographics",
     response_model=None,
     summary="IRIS GeoJSON enriched with demographic and socio-economic scores",

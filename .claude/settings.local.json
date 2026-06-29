@@ -7,7 +7,11 @@
       "Bash(venv/Scripts/python -c ':*)",
       "Bash(python -c \"import email_validator; print\\('email-validator ok'\\)\")",
       "Bash(python -c \"import secrets; print\\(secrets.token_hex\\(32\\)\\)\")",
-      "Bash(python3 -c \"import json; f=json.load\\(open\\('data/bronze/main_data/iris.geojson'\\)\\); print\\(f'Total IRIS features: {len\\(f.get\\(\\\\\"features\\\\\", []\\)\\)}'\\)\")"
+      "Bash(python3 -c \"import json; f=json.load\\(open\\('data/bronze/main_data/iris.geojson'\\)\\); print\\(f'Total IRIS features: {len\\(f.get\\(\\\\\"features\\\\\", []\\)\\)}'\\)\")",
+      "Read(//c/Users/annan/**)",
+      "Bash(mkdir -p \".claude/local-marketplace/.claude-plugin\" \".claude/local-marketplace/qd-toolkit/.claude-plugin\" \".claude/local-marketplace/qd-toolkit/skills/avoid-ai-writing\" \".claude/local-marketplace/qd-toolkit/skills/coding-guidelines\")",
+      "Bash(npm run *)",
+      "Bash(taskkill *)"
     ]
   }
 }

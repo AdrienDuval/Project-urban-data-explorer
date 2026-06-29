@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -134,9 +134,9 @@ def create_app() -> FastAPI:
         summary="Health check",
         description="Returns 200 OK with dataset record counts when the API is ready.",
     )
-    def health(app=app):
+    def health(request: Request):
         """Confirm the API is running and all datasets are loaded."""
-        data: DataStore = app.state.data
+        data: DataStore = request.app.state.data
         return {
             "status": "ok",
             "iris_zones": len(data.iris_scores),

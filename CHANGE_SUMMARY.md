@@ -14,7 +14,7 @@ The map is built with:
 - Tailwind CSS for responsive styling.
 - Mapbox GL through `react-map-gl` for the interactive map.
 
-## Current Refinement: Main Indicators + Sub-Indicators
+## Current refinement: main indicators and sub-indicators
 
 The dashboard now follows a two-level indicator model:
 
@@ -23,7 +23,7 @@ The dashboard now follows a two-level indicator model:
 
 This replaces the earlier flat UI where `Family mix`, `Schools`, `Transport`, and other pillars appeared at the same level.
 
-### Current Main Indicator Model
+### Current main indicator model
 
 | Main indicator | Geography | Main score | Sub-indicators / fields |
 | --- | --- | --- | --- |
@@ -32,7 +32,7 @@ This replaces the earlier flat UI where `Family mix`, `Schools`, `Transport`, an
 | `Confort thermique` | IRIS | `thermal_score` | `tree_density_score`, `cooling_area_score`, plus raw `densite_arbres` and `ratio_fraicheur` |
 | `Logement` | Arrondissement | affordability score | `rent_score` from median rent €/m² and `sale_score` from latest median sale price €/m² |
 
-### New Backend Map Routes
+### New backend map routes
 
 The map API now exposes multiple map-ready GeoJSON layers:
 
@@ -45,7 +45,7 @@ GET /map/housing/sale
 
 `/map/vivabilite-familiale`, `/map/thermal-comfort`, and `/map/transport`-related scoring are IRIS-level. Housing layers are arrondissement-level because the current rent and sale Gold outputs are aggregated to arrondissement polygons.
 
-### New Gold Data Loaded By The API
+### New Gold data loaded by the API
 
 The API `DataStore` now loads:
 
@@ -58,7 +58,7 @@ The API `DataStore` now loads:
 
 The frontend fetches the new layers lazily when a user selects the relevant main indicator.
 
-### Dependency Notes
+### Dependency notes
 
 The pipeline now needs these dependencies in addition to the original stack:
 
@@ -67,9 +67,9 @@ The pipeline now needs these dependencies in addition to the original stack:
 - `pyarrow` for Parquet Gold outputs.
 - `pytest` and `httpx` for map endpoint tests.
 
-## Backend Changes
+## Backend changes
 
-### GeoJSON Data Loading
+### GeoJSON data loading
 
 Updated `api/services/data_loader.py` so the API startup `DataStore` also loads IRIS geometry from:
 
@@ -85,7 +85,7 @@ DataStore.iris_geojson
 
 This makes the geometry available to API services without re-reading the file for every request.
 
-### Map Service
+### Map service
 
 Added `api/services/map_service.py`.
 
@@ -120,7 +120,7 @@ The service also returns clear errors when required data is missing:
 - Missing `vivabilite_familiale_iris.csv`.
 - No matching IRIS zones between geometry and scores.
 
-### Map Router
+### Map router
 
 Added `api/routers/map.py` with this endpoint:
 
@@ -130,9 +130,9 @@ GET /map/vivabilite-familiale
 
 The endpoint returns a GeoJSON `FeatureCollection` for direct use by the frontend map.
 
-If the map data is not ready, it returns a `503` response with a useful error message instead of silently failing.
+If the map data is not ready, it returns a `503` response with an error message instead of silently failing.
 
-### API Registration
+### API registration
 
 Updated `api/main.py` to register the new router:
 
@@ -142,9 +142,9 @@ Updated `api/main.py` to register the new router:
 
 The new route is now available alongside the existing API routes for IRIS, population, schools, transport, and indicators.
 
-## Frontend Changes
+## Frontend changes
 
-### New Next.js App
+### New Next.js app
 
 Created a new frontend project in:
 
@@ -161,7 +161,7 @@ The app uses:
 - `react-map-gl`.
 - `mapbox-gl`.
 
-### Frontend API Client
+### Frontend API client
 
 Added `web/src/lib/api.ts`.
 
@@ -179,7 +179,7 @@ and fetches:
 
 It also extracts backend error messages so the UI can explain what is wrong when the API or data is unavailable.
 
-### GeoJSON Types
+### GeoJSON types
 
 Added `web/src/types/map.ts`.
 
@@ -191,7 +191,7 @@ This file defines TypeScript types for the vivability map data:
 
 These types make the map UI safer and clearer when accessing score, rank, population, and IRIS metadata.
 
-### Interactive Map Dashboard
+### Interactive map dashboard
 
 Added `web/src/components/MapDashboard.tsx`.
 
@@ -208,11 +208,11 @@ This is the main map experience. It includes:
 - Loading state.
 - Error state when the API or Gold data is missing.
 
-### Home Page
+### Home page
 
 Updated `web/src/app/page.tsx` to render the new `MapDashboard` instead of the default Next.js starter page.
 
-### Global Styling
+### Global styling
 
 Updated `web/src/app/globals.css` to:
 
@@ -225,7 +225,7 @@ Updated `web/src/app/globals.css` to:
 
 Updated `web/src/app/layout.tsx` with Urban Data Explorer metadata.
 
-### Frontend Environment Example
+### Frontend environment example
 
 Added `web/.env.example`:
 
@@ -236,11 +236,11 @@ NEXT_PUBLIC_MAPBOX_TOKEN=
 
 `NEXT_PUBLIC_MAPBOX_TOKEN` can be filled with a Mapbox token. If it is empty, the map falls back to a public Mapbox-compatible basemap style.
 
-### Next.js Build Config
+### Next.js build config
 
 Updated `web/next.config.ts` to set the Turbopack root to the `web/` app directory. This removes the workspace-root warning caused by multiple lockfiles elsewhere on the machine.
 
-## Documentation Changes
+## Documentation changes
 
 Updated `README.md` with:
 
@@ -250,9 +250,9 @@ Updated `README.md` with:
 - The backend command to start the API.
 - The pipeline command needed to generate the Gold vivability CSV.
 
-## How To Run The Map
+## How to run the map
 
-### 1. Generate The Gold Indicator Data
+### 1. Generate the Gold indicator data
 
 From the project root:
 
@@ -268,7 +268,7 @@ data/gold/vivabilite_familiale_iris.csv
 
 If this file is missing, the frontend will show a clear "Map data unavailable" message.
 
-### 2. Start The FastAPI Backend
+### 2. Start the FastAPI backend
 
 Use the project virtual environment:
 
@@ -288,7 +288,7 @@ You can test the new map endpoint directly here:
 http://127.0.0.1:8000/map/vivabilite-familiale
 ```
 
-### 3. Configure The Frontend
+### 3. Configure the frontend
 
 From the `web/` folder:
 
@@ -305,7 +305,7 @@ NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
 
 The Mapbox token is recommended. Without it, the app uses a public fallback basemap style.
 
-### 4. Start The Next.js Frontend
+### 4. Start the Next.js frontend
 
 From the `web/` folder:
 
@@ -320,15 +320,15 @@ Open:
 http://localhost:3000
 ```
 
-## How To Navigate The Map
+## How to navigate the map
 
-### Basic Navigation
+### Basic navigation
 
 - Drag the map to pan around Paris.
 - Scroll with the mouse wheel or pinch on a trackpad to zoom.
 - On mobile, drag with one finger to move and pinch with two fingers to zoom.
 
-### Reading The Colors
+### Reading the colors
 
 The map uses a choropleth color scale based on `vivabilite_score`:
 
@@ -338,13 +338,13 @@ The map uses a choropleth color scale based on `vivabilite_score`:
 
 The legend shows the score scale from `0` to `10`.
 
-### Hovering An IRIS Zone
+### Hovering an IRIS zone
 
 Move the mouse over a colored IRIS polygon.
 
 The hovered area gets an outline so you can see which zone is active.
 
-### Selecting An IRIS Zone
+### Selecting an IRIS zone
 
 Click an IRIS polygon to select it.
 
@@ -354,7 +354,7 @@ After selection:
 - The detail panel updates with that IRIS zone.
 - The selected polygon keeps a stronger outline.
 
-### Detail Panel
+### Detail panel
 
 The detail panel shows:
 
@@ -373,13 +373,13 @@ On desktop, the panel appears as a card near the bottom/right of the map.
 
 On smaller screens, it behaves like a mobile-friendly bottom panel.
 
-### Clearing A Selection
+### Clearing a selection
 
 Click the `Close` button in the detail panel to return to the overview state.
 
 When no IRIS is selected, the panel shows a Paris overview based on loaded map data.
 
-### Error Overlay
+### Error overlay
 
 If the frontend cannot load data, an error overlay appears.
 
@@ -392,7 +392,7 @@ Common reasons:
 
 The overlay includes the commands needed to regenerate data and start the API.
 
-## Validation Performed
+## Validation performed
 
 The following checks passed after implementation:
 
@@ -409,7 +409,7 @@ The backend data smoke test confirmed:
 
 At the time of testing, `data/gold/vivabilite_familiale_iris.csv` was missing locally, so the map endpoint correctly returned a data-unavailable message until the Gold pipeline is run.
 
-## Files Added Or Updated
+## Files added or updated
 
 ### Backend
 
@@ -436,7 +436,7 @@ At the time of testing, `data/gold/vivabilite_familiale_iris.csv` was missing lo
 - `README.md`
 - `CHANGE_SUMMARY.md`
 
-## Current Status
+## Current status
 
 The first interactive map foundation is implemented. It is ready to display the `vivabilite_familiale` IRIS choropleth once the Gold indicator CSV exists locally and the API is running.
 

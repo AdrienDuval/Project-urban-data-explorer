@@ -99,14 +99,12 @@ def process_thermal_comfort_gold():
 
     # Export
     cols_to_keep = [
-        "code_iris", "nom_iris", "densite_arbres",
-        "ratio_fraicheur", "indice_confort_thermique", "geometry"
         "code_iris", "nom_iris", "arrondissement",
         "densite_arbres", "ratio_fraicheur",
         "tree_density_score", "cooling_area_score",
         "proximity_score", "thermal_score",
         "indice_confort_thermique",
-        "geometry"
+        "geometry",
     ]
     
     gdf_final = df[cols_to_keep].copy()

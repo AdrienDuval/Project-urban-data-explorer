@@ -102,11 +102,12 @@ if __name__ == "__main__":
     parser.add_argument("--gold",   action="store_true", help="Run silver→gold only")
     args = parser.parse_args()
 
-    if args.silver:
-        run_silver()
-    elif args.gold:
-        run_gold()
-    else:
-        run_bronze()
-        run_silver()
-        run_gold()
+    # if args.silver:
+    #     run_silver()
+    # elif args.gold:
+    #     run_gold()
+    # else:
+    #     run_bronze()
+    #     run_silver()
+    #     run_gold()
+    run_gold()

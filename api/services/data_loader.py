@@ -9,9 +9,9 @@ themselves.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from functools import cached_property
 import json
-from typing import Any
+import logging
 
 import geopandas as gpd
 import pandas as pd
@@ -33,215 +33,180 @@ from src.config import (
     VIVABILITE_GOLD,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _clean_df(df: pd.DataFrame) -> pd.DataFrame:
     """Replace NaN / NaT with None so Pydantic can serialise the rows."""
     return df.where(pd.notnull(df), other=None)
 
 
-@dataclass
-class DataStore:
-    """In-memory snapshot of all datasets used by the API.
+def _read_geo_gold(path) -> gpd.GeoDataFrame:
+    """Read a geo gold file, tolerating Parquet *or* CSV-with-WKT content.
 
-    Attributes:
-        iris_scores:  Gold-layer DataFrame (992 rows) – one row per Paris IRIS
-            zone with school-count, schools_per_1000, and school_score.
-        schools:      Silver-layer DataFrame (1 377 rows) – deduplicated school
-            catalog with lat/lng coordinates.
-        population:   Silver-layer DataFrame (861 rows) – residential IRIS zones
-            with 2019 census population.
-        vivabilite_scores: Gold composite family-liveability score per IRIS.
-        bdcom_scores: Gold BDCOM commercial establishments per IRIS.
-        dvf_scores: Gold DVF housing transactions per IRIS.
+    Some gold scripts write ``to_csv`` to a ``.parquet`` path, so read_parquet
+    fails on those files. Fall back to reading as CSV and parsing the WKT
+    ``geometry`` column into a real GeoDataFrame.
     """
-
-    iris_scores: pd.DataFrame
-    schools: pd.DataFrame
-    population: pd.DataFrame
-    vivabilite_scores: pd.DataFrame
-    transport_scores: pd.DataFrame
-    transport_points: pd.DataFrame
-    thermal_comfort_scores: gpd.GeoDataFrame
-    rent_price_scores: gpd.GeoDataFrame
-    sale_price_scores: gpd.GeoDataFrame
-    bdcom_scores: pd.DataFrame
-    dvf_scores: pd.DataFrame
-    iris_geojson: dict[str, Any]
-    arrondissements_geojson: dict[str, Any]
-    demographics_scores: pd.DataFrame
+    try:
+        return gpd.read_parquet(path)
+    except Exception:
+        df = pd.read_csv(path)
+        if "geometry" in df.columns:
+            geometry = gpd.GeoSeries.from_wkt(df["geometry"].astype(str))
+            return gpd.GeoDataFrame(df.drop(columns=["geometry"]), geometry=geometry, crs="EPSG:4326")
+        return gpd.GeoDataFrame(df)
 
 
-    # ------------------------------------------------------------------
-    # Factory
-    # ------------------------------------------------------------------
+class DataStore:
+    """Lazily-loaded snapshot of all datasets used by the API.
+
+    Each dataset is read from disk on **first access** and cached for the
+    process lifetime via ``functools.cached_property``. Nothing is read at
+    startup, so the API starts instantly and a missing or corrupt file only
+    affects the endpoints that actually touch it.
+
+    The service-facing interface is unchanged: callers still read
+    ``store.iris_scores``, ``store.sale_price_scores`` etc. as attributes.
+    """
 
     @classmethod
     def load(cls) -> "DataStore":
-        """Read all CSVs from disk and return a populated DataStore.
+        """Return a store whose datasets load lazily on first access."""
+        return cls()
 
-        ``code_iris`` is normalised to a zero-padded 9-character string so that
-        URL path parameters always match.  ``school_count`` is cast to ``int``
-        (missing values become 0).
-
-        Missing files produce an empty DataFrame with a warning instead of
-        crashing the API — useful when the pipeline hasn't been run yet.
-        """
-        import logging
-        logger = logging.getLogger(__name__)
-
-        if IRIS_GEOJSON.exists():
-            logger.info("Loading geometry: %s", IRIS_GEOJSON.name)
-            with IRIS_GEOJSON.open(encoding="utf-8") as fh:
-                iris_geojson = json.load(fh)
-            logger.info("  → %d IRIS geometries loaded", len(iris_geojson.get("features", [])))
-        else:
+    # -- geometry -------------------------------------------------------
+    @cached_property
+    def iris_geojson(self) -> dict:
+        if not IRIS_GEOJSON.exists():
             logger.warning("IRIS GeoJSON not found: %s — run `python run_pipeline.py`", IRIS_GEOJSON)
-            iris_geojson = {"type": "FeatureCollection", "features": []}
+            return {"type": "FeatureCollection", "features": []}
+        logger.info("Loading geometry: %s", IRIS_GEOJSON.name)
+        with IRIS_GEOJSON.open(encoding="utf-8") as fh:
+            return json.load(fh)
 
-        if ARRONDISSEMENTS.exists():
-            logger.info("Loading geometry: %s", ARRONDISSEMENTS.name)
-            with ARRONDISSEMENTS.open(encoding="utf-8") as fh:
-                arrondissements_geojson = json.load(fh)
-            logger.info("  → %d arrondissements loaded", len(arrondissements_geojson.get("features", [])))
-        else:
+    @cached_property
+    def arrondissements_geojson(self) -> dict:
+        if not ARRONDISSEMENTS.exists():
             logger.warning("Arrondissements GeoJSON not found: %s", ARRONDISSEMENTS)
-            arrondissements_geojson = {"type": "FeatureCollection", "features": []}
+            return {"type": "FeatureCollection", "features": []}
+        logger.info("Loading geometry: %s", ARRONDISSEMENTS.name)
+        with ARRONDISSEMENTS.open(encoding="utf-8") as fh:
+            return json.load(fh)
 
-        if SCHOOL_DENSITY_GOLD.exists():
-            logger.info("Loading gold: %s", SCHOOL_DENSITY_GOLD.name)
-            iris_scores = pd.read_csv(SCHOOL_DENSITY_GOLD, dtype={"code_iris": str})
-            iris_scores["code_iris"] = iris_scores["code_iris"].str.zfill(9)
-            iris_scores["school_count"] = iris_scores["school_count"].fillna(0).astype(int)
-            logger.info("  → %d IRIS zones loaded", len(iris_scores))
-        else:
+    # -- silver / gold tables ------------------------------------------
+    @cached_property
+    def iris_scores(self) -> pd.DataFrame:
+        if not SCHOOL_DENSITY_GOLD.exists():
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", SCHOOL_DENSITY_GOLD)
-            iris_scores = pd.DataFrame()
+            return pd.DataFrame()
+        logger.info("Loading gold: %s", SCHOOL_DENSITY_GOLD.name)
+        df = pd.read_csv(SCHOOL_DENSITY_GOLD, dtype={"code_iris": str})
+        df["code_iris"] = df["code_iris"].str.zfill(9)
+        df["school_count"] = df["school_count"].fillna(0).astype(int)
+        return _clean_df(df)
 
-        if SCHOOLS_SILVER.exists():
-            logger.info("Loading silver: %s", SCHOOLS_SILVER.name)
-            schools = pd.read_csv(SCHOOLS_SILVER, dtype={"code_insee": str})
-            logger.info("  → %d schools loaded", len(schools))
-        else:
+    @cached_property
+    def schools(self) -> pd.DataFrame:
+        if not SCHOOLS_SILVER.exists():
             logger.warning("Silver file not found: %s — run `python run_pipeline.py`", SCHOOLS_SILVER)
-            schools = pd.DataFrame()
+            return pd.DataFrame()
+        logger.info("Loading silver: %s", SCHOOLS_SILVER.name)
+        return _clean_df(pd.read_csv(SCHOOLS_SILVER, dtype={"code_insee": str}))
 
-        if POPULATION_SILVER.exists():
-            logger.info("Loading silver: %s", POPULATION_SILVER.name)
-            population = pd.read_csv(POPULATION_SILVER, dtype={"IRIS": str})
-            population["IRIS"] = population["IRIS"].str.zfill(9)
-            logger.info("  → %d population zones loaded", len(population))
-        else:
+    @cached_property
+    def population(self) -> pd.DataFrame:
+        if not POPULATION_SILVER.exists():
             logger.warning("Silver file not found: %s — run `python run_pipeline.py`", POPULATION_SILVER)
-            population = pd.DataFrame()
-        
-        if TRANSPORT_INDICATOR_GOLD.exists():
-            transport_scores = pd.read_csv(TRANSPORT_INDICATOR_GOLD, dtype={"CODE_IRIS": str})
-            transport_scores["CODE_IRIS"] = transport_scores["CODE_IRIS"].str.zfill(9)
-        else:
-            transport_scores = pd.DataFrame()
+            return pd.DataFrame()
+        logger.info("Loading silver: %s", POPULATION_SILVER.name)
+        df = pd.read_csv(POPULATION_SILVER, dtype={"IRIS": str})
+        df["IRIS"] = df["IRIS"].str.zfill(9)
+        return _clean_df(df)
 
-        if TRANSPORT_POINTS_GOLD.exists():
-            transport_points = pd.read_csv(TRANSPORT_POINTS_GOLD, dtype={"id": str})
-        else:
-            transport_points = pd.DataFrame()
+    @cached_property
+    def transport_scores(self) -> pd.DataFrame:
+        if not TRANSPORT_INDICATOR_GOLD.exists():
+            return pd.DataFrame()
+        df = pd.read_csv(TRANSPORT_INDICATOR_GOLD, dtype={"CODE_IRIS": str})
+        df["CODE_IRIS"] = df["CODE_IRIS"].str.zfill(9)
+        return _clean_df(df)
 
-        if VIVABILITE_GOLD.exists():
-            logger.info("Loading gold: %s", VIVABILITE_GOLD.name)
-            vivabilite_scores = pd.read_csv(VIVABILITE_GOLD, dtype={"IRIS": str, "code_iris": str})
-            vivabilite_scores["IRIS"] = vivabilite_scores["IRIS"].str.zfill(9)
-            logger.info("  → %d IRIS zones loaded", len(vivabilite_scores))
-        else:
+    @cached_property
+    def transport_points(self) -> pd.DataFrame:
+        if not TRANSPORT_POINTS_GOLD.exists():
+            return pd.DataFrame()
+        return _clean_df(pd.read_csv(TRANSPORT_POINTS_GOLD, dtype={"id": str}))
+
+    @cached_property
+    def vivabilite_scores(self) -> pd.DataFrame:
+        if not VIVABILITE_GOLD.exists():
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", VIVABILITE_GOLD)
-            vivabilite_scores = pd.DataFrame()
+            return pd.DataFrame()
+        logger.info("Loading gold: %s", VIVABILITE_GOLD.name)
+        df = pd.read_csv(VIVABILITE_GOLD, dtype={"IRIS": str, "code_iris": str})
+        df["IRIS"] = df["IRIS"].str.zfill(9)
+        return _clean_df(df)
 
-        if THERMAL_COMFORT_GOLD.exists():
-            logger.info("Loading gold: %s", THERMAL_COMFORT_GOLD.name)
-            thermal_comfort_scores = gpd.read_parquet(THERMAL_COMFORT_GOLD)
-            thermal_comfort_scores["code_iris"] = (
-                thermal_comfort_scores["code_iris"].astype(str).str.zfill(9)
-            )
-            logger.info("  → %d thermal comfort zones loaded", len(thermal_comfort_scores))
-        else:
+    @cached_property
+    def thermal_comfort_scores(self) -> gpd.GeoDataFrame:
+        if not THERMAL_COMFORT_GOLD.exists():
             logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", THERMAL_COMFORT_GOLD)
-            thermal_comfort_scores = gpd.GeoDataFrame()
+            return gpd.GeoDataFrame()
+        logger.info("Loading gold: %s", THERMAL_COMFORT_GOLD.name)
+        gdf = _read_geo_gold(THERMAL_COMFORT_GOLD)
+        if "code_iris" in gdf.columns:
+            gdf["code_iris"] = gdf["code_iris"].astype(str).str.zfill(9)
+        return gdf
 
-        if RENT_PRICE_GOLD.exists():
-            logger.info("Loading gold: %s", RENT_PRICE_GOLD.name)
-            rent_price_scores = gpd.read_parquet(RENT_PRICE_GOLD)
-            rent_price_scores["c_ar"] = rent_price_scores["c_ar"].astype(str)
-            logger.info("  → %d rent zones loaded", len(rent_price_scores))
-        else:
+    @cached_property
+    def rent_price_scores(self) -> gpd.GeoDataFrame:
+        if not RENT_PRICE_GOLD.exists():
             logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", RENT_PRICE_GOLD)
-            rent_price_scores = gpd.GeoDataFrame()
+            return gpd.GeoDataFrame()
+        logger.info("Loading gold: %s", RENT_PRICE_GOLD.name)
+        gdf = _read_geo_gold(RENT_PRICE_GOLD)
+        gdf["c_ar"] = gdf["c_ar"].astype(str)
+        return gdf
 
-        if SALE_PRICE_GOLD.exists():
-            logger.info("Loading gold: %s", SALE_PRICE_GOLD.name)
-            sale_price_scores = gpd.read_parquet(SALE_PRICE_GOLD)
-            sale_price_scores["c_ar"] = sale_price_scores["c_ar"].astype(str)
-            logger.info("  → %d sale price rows loaded", len(sale_price_scores))
-        else:
+    @cached_property
+    def sale_price_scores(self) -> gpd.GeoDataFrame:
+        if not SALE_PRICE_GOLD.exists():
             logger.warning("Gold file not found: %s — run `python run_pipeline.py --gold`", SALE_PRICE_GOLD)
-            sale_price_scores = gpd.GeoDataFrame()
+            return gpd.GeoDataFrame()
+        logger.info("Loading gold: %s", SALE_PRICE_GOLD.name)
+        gdf = _read_geo_gold(SALE_PRICE_GOLD)
+        gdf["c_ar"] = gdf["c_ar"].astype(str)
+        return gdf
 
-        if THERMAL_COMFORT_GOLD.exists():
-            logger.info("Loading gold: %s", THERMAL_COMFORT_GOLD.name)
-            # Utilise read_parquet au lieu de read_csv
-            thermal_comfort_scores = gpd.read_parquet(THERMAL_COMFORT_GOLD)
-            if "code_iris" in thermal_comfort_scores.columns:
-                thermal_comfort_scores["code_iris"] = (
-                    thermal_comfort_scores["code_iris"].astype(str).str.zfill(9)
-                )
-            logger.info("- %d thermal comfort zones loaded", len(thermal_comfort_scores))
-        else:
-            logger.warning("Gold file not found: %s", THERMAL_COMFORT_GOLD)
-            thermal_comfort_scores = gpd.GeoDataFrame()
-
-        if BDCOM_GOLD.exists():
-            logger.info("Loading gold: %s", BDCOM_GOLD.name)
-            bdcom_scores = pd.read_csv(BDCOM_GOLD, dtype={"code_iris": str})
-            bdcom_scores["code_iris"] = bdcom_scores["code_iris"].str.zfill(9)
-            logger.info("  → %d IRIS zones loaded", len(bdcom_scores))
-        else:
+    @cached_property
+    def bdcom_scores(self) -> pd.DataFrame:
+        if not BDCOM_GOLD.exists():
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", BDCOM_GOLD)
-            bdcom_scores = pd.DataFrame()
+            return pd.DataFrame()
+        logger.info("Loading gold: %s", BDCOM_GOLD.name)
+        df = pd.read_csv(BDCOM_GOLD, dtype={"code_iris": str})
+        df["code_iris"] = df["code_iris"].str.zfill(9)
+        return _clean_df(df)
 
-        if DVF_GOLD.exists():
-            logger.info("Loading gold: %s", DVF_GOLD.name)
-            dvf_scores = pd.read_csv(DVF_GOLD, dtype={"code_iris": str})
-            dvf_scores["code_iris"] = dvf_scores["code_iris"].str.zfill(9)
-            dvf_scores = pd.read_csv(DVF_GOLD)
-            if "code_iris" in dvf_scores.columns:
-                dvf_scores["code_iris"] = dvf_scores["code_iris"].astype(str).str.zfill(9)
-            logger.info("  → %d DVF rows loaded", len(dvf_scores))
-            logger.info("  → %d IRIS zones loaded", len(dvf_scores))
-        else:
+    @cached_property
+    def dvf_scores(self) -> pd.DataFrame:
+        if not DVF_GOLD.exists():
             logger.warning("Gold file not found: %s — run `python run_pipeline.py`", DVF_GOLD)
-            dvf_scores = pd.DataFrame()
+            return pd.DataFrame()
+        logger.info("Loading gold: %s", DVF_GOLD.name)
+        df = pd.read_csv(DVF_GOLD)
+        if "code_iris" in df.columns:
+            df["code_iris"] = df["code_iris"].astype(str).str.zfill(9)
+        return _clean_df(df)
 
-        # Dans la méthode load(), ajouter :
-        if DEMO_GOLD.exists():
-            logger.info("Loading gold: %s", DEMO_GOLD.name)
-            demographics_scores = pd.read_csv(DEMO_GOLD, dtype={"code_iris": str})
-            demographics_scores["code_iris"] = demographics_scores["code_iris"].str.zfill(9)
-            logger.info("  → %d demographics zones loaded", len(demographics_scores))
-        else:
+    @cached_property
+    def demographics_scores(self) -> pd.DataFrame:
+        if not DEMO_GOLD.exists():
             logger.warning("Gold file not found: %s", DEMO_GOLD)
-            demographics_scores = pd.DataFrame()
+            return pd.DataFrame()
+        logger.info("Loading gold: %s", DEMO_GOLD.name)
+        df = pd.read_csv(DEMO_GOLD, dtype={"code_iris": str})
+        df["code_iris"] = df["code_iris"].str.zfill(9)
+        return _clean_df(df)
 
-
-        return cls(
-            iris_scores=_clean_df(iris_scores),
-            schools=_clean_df(schools),
-            population=_clean_df(population),
-            vivabilite_scores=_clean_df(vivabilite_scores),
-            transport_scores=_clean_df(transport_scores),
-            transport_points=_clean_df(transport_points),
-            thermal_comfort_scores=thermal_comfort_scores,
-            rent_price_scores=rent_price_scores,
-            sale_price_scores=sale_price_scores,
-            bdcom_scores=_clean_df(bdcom_scores),
-            dvf_scores=_clean_df(dvf_scores),
-            iris_geojson=iris_geojson,
-            arrondissements_geojson=arrondissements_geojson,
-            demographics_scores=_clean_df(demographics_scores),
-        )
